@@ -1,0 +1,20 @@
+# The official nginx image substitutes only defined environment variables, so $uri and $backend are left alone.
+server {
+  listen 80;
+  root /usr/share/nginx/html;
+
+  # Resolve the backend per request (Docker's DNS, 10 s cache), so nginx starts and serves the app even when the
+  # backend's name does not resolve yet; /api then answers 502 and the UI shows its error state.
+  resolver 127.0.0.11 valid=10s ipv6=off;
+  set $backend ${PORTAL_BACKEND_URL};
+
+  location /api/ {
+    rewrite ^/api/(.*)$ /$1 break;
+    proxy_pass $backend;
+    proxy_read_timeout 30s;
+  }
+
+  location / {
+    try_files $uri /index.html;
+  }
+}

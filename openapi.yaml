@@ -1,0 +1,787 @@
+openapi: 3.1.0
+info:
+  title: SOC portal backend
+  version: "1"
+  description: |
+    The contract between the portal UI and any portal backend: the mock in `portal_mock/` today, Durai's
+    backend later. Spec sections 9-11. The UI calls only these routes.
+
+    - Case, rule and health routes are served by forwarding to pipeline-api; their bodies are pipeline-api's.
+    - Investigation and proposal routes are the agent side.
+    - Every POST that records a decision carries the analyst in `X-Analyst` (no authentication, spec 15).
+    - Errors: 400 is `FieldErrors`, 404 and 409 are `Problem`, 502 is `Problem` with
+      `error: pipeline_unavailable`.
+servers:
+  - url: /api
+tags:
+  - name: cases
+  - name: rules
+  - name: agent
+  - name: ops
+
+paths:
+  /queue:
+    get:
+      operationId: getQueue
+      tags: [agent]
+      summary: |
+        Cases with their agent status, most recently updated first (open and merged ones by default).
+        Filters apply before the limit; a result as long as `limit` may have more behind it.
+      parameters:
+        - {name: status, in: query, schema: {$ref: "#/components/schemas/CaseStatus"}}
+        - {name: severity, in: query, description: minimum severity, schema: {type: integer, minimum: 1, maximum: 5}}
+        - {name: entity, in: query, description: "exact host, user or IP in the case", schema: {type: string}}
+        - {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 500, default: 100}}
+      responses:
+        "200":
+          description: Queue items
+          content:
+            application/json:
+              schema: {type: array, items: {$ref: "#/components/schemas/QueueItem"}}
+        "502": {$ref: "#/components/responses/Unavailable"}
+
+  /investigations/{case_id}:
+    get:
+      operationId: getInvestigations
+      tags: [agent]
+      parameters: [{$ref: "#/components/parameters/CaseId"}]
+      responses:
+        "200":
+          description: Latest investigation and history
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Investigations"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "502": {$ref: "#/components/responses/Unavailable"}
+
+  /proposals:
+    get:
+      operationId: listProposals
+      tags: [agent]
+      parameters:
+        - {name: case_id, in: query, schema: {type: integer}}
+        - {name: status, in: query, schema: {$ref: "#/components/schemas/ProposalStatus"}}
+      responses:
+        "200":
+          description: Proposals, newest first
+          content:
+            application/json:
+              schema: {type: array, items: {$ref: "#/components/schemas/ActionProposal"}}
+
+  /proposals/{proposal_id}/approve:
+    post:
+      operationId: approveProposal
+      tags: [agent]
+      summary: Approve exactly the proposal shown (spec 10.2-10.4).
+      parameters: [{$ref: "#/components/parameters/ProposalId"}, {$ref: "#/components/parameters/Analyst"}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [approval_hash, reason]
+              properties:
+                approval_hash: {type: string, pattern: "^[0-9a-f]{64}$"}
+                reason: {type: string, minLength: 1}
+      responses:
+        "200": {$ref: "#/components/responses/Proposal"}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "409": {$ref: "#/components/responses/Conflict"}
+
+  /proposals/{proposal_id}/reject:
+    post:
+      operationId: rejectProposal
+      tags: [agent]
+      parameters: [{$ref: "#/components/parameters/ProposalId"}, {$ref: "#/components/parameters/Analyst"}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/ReasonBody"}
+      responses:
+        "200": {$ref: "#/components/responses/Proposal"}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "409": {$ref: "#/components/responses/Conflict"}
+
+  /proposals/{proposal_id}/undo:
+    post:
+      operationId: undoProposal
+      tags: [agent]
+      summary: Create a reverse proposal for a succeeded action (spec 10.10). It needs its own approval.
+      parameters: [{$ref: "#/components/parameters/ProposalId"}, {$ref: "#/components/parameters/Analyst"}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/ReasonBody"}
+      responses:
+        "201": {$ref: "#/components/responses/Proposal"}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "409": {$ref: "#/components/responses/Conflict"}
+
+  /cases:
+    get:
+      operationId: listCases
+      tags: [cases]
+      parameters:
+        - {name: status, in: query, schema: {$ref: "#/components/schemas/CaseStatus"}}
+        - {name: severity, in: query, description: minimum severity, schema: {type: integer, minimum: 1, maximum: 5}}
+        - {name: entity, in: query, description: "a host, user or IP in the case", schema: {type: string}}
+        - {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 500}}
+      responses:
+        "200":
+          description: Cases, most recently updated first
+          content:
+            application/json:
+              schema: {type: array, items: {$ref: "#/components/schemas/CaseSummary"}}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "502": {$ref: "#/components/responses/Unavailable"}
+
+  /cases/{case_id}:
+    get:
+      operationId: getCase
+      tags: [cases]
+      parameters: [{$ref: "#/components/parameters/CaseId"}]
+      responses:
+        "200":
+          description: Case with alerts, enrichment and events
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/CaseDetail"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "502": {$ref: "#/components/responses/Unavailable"}
+
+  /cases/{case_id}/verdict:
+    post:
+      operationId: setCaseVerdict
+      tags: [cases]
+      summary: Analyst verdict; closes the case if `expected_version` is still current.
+      parameters: [{$ref: "#/components/parameters/CaseId"}, {$ref: "#/components/parameters/Analyst"}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [verdict, expected_version]
+              properties:
+                verdict: {type: string, enum: [malicious, benign, false_positive]}
+                note: {type: string}
+                expected_version: {type: integer}
+      responses:
+        "200":
+          description: The closed case
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/CaseDetail"}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "409": {$ref: "#/components/responses/Conflict"}
+        "502": {$ref: "#/components/responses/Unavailable"}
+
+  /rules:
+    get:
+      operationId: listRules
+      tags: [rules]
+      parameters:
+        - {name: status, in: query, schema: {$ref: "#/components/schemas/RuleStatus"}}
+        - {name: expiring_within_days, in: query, schema: {type: integer, minimum: 0}}
+      responses:
+        "200":
+          description: Rules
+          content:
+            application/json:
+              schema: {type: array, items: {$ref: "#/components/schemas/Rule"}}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "502": {$ref: "#/components/responses/Unavailable"}
+
+  /rules/{rule_id}:
+    get:
+      operationId: getRule
+      tags: [rules]
+      parameters: [{$ref: "#/components/parameters/RuleId"}]
+      responses:
+        "200": {$ref: "#/components/responses/Rule"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "502": {$ref: "#/components/responses/Unavailable"}
+
+  /rules/validate:
+    post:
+      operationId: validateRule
+      tags: [rules]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {type: object, additionalProperties: true}
+      responses:
+        "200":
+          description: Well-formedness result
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [valid, errors]
+                properties:
+                  valid: {type: boolean}
+                  errors: {type: array, items: {$ref: "#/components/schemas/FieldError"}}
+        "502": {$ref: "#/components/responses/Unavailable"}
+
+  /rules/simulate:
+    post:
+      operationId: simulateRule
+      tags: [rules]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [rule]
+              properties:
+                rule: {type: object, additionalProperties: true}
+                lookback_days: {type: integer, minimum: 1, default: 30}
+      responses:
+        "200":
+          description: What the rule would have matched
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/SimulationResult"}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "502": {$ref: "#/components/responses/Unavailable"}
+
+  /rules/{rule_id}/renew:
+    post:
+      operationId: renewRule
+      tags: [rules]
+      summary: New validity for an active rule; needs a simulation of the same definition from the last 24 h.
+      parameters: [{$ref: "#/components/parameters/RuleId"}, {$ref: "#/components/parameters/Analyst"}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [expected_version, valid_until, simulation_id]
+              properties:
+                expected_version: {type: integer}
+                valid_until: {type: string, format: date-time}
+                simulation_id: {type: string, format: uuid}
+      responses:
+        "200": {$ref: "#/components/responses/Rule"}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "409": {$ref: "#/components/responses/Conflict"}
+        "502": {$ref: "#/components/responses/Unavailable"}
+
+  /rule-suggestions:
+    get:
+      operationId: listRuleSuggestions
+      tags: [rules]
+      summary: Rules in status `suggested`; their reasoning is in the definition (`reason`, `evidence_case_ids`).
+      responses:
+        "200":
+          description: Suggested rules
+          content:
+            application/json:
+              schema: {type: array, items: {$ref: "#/components/schemas/Rule"}}
+        "502": {$ref: "#/components/responses/Unavailable"}
+
+  /rule-suggestions/{rule_id}/approve:
+    post:
+      operationId: approveRuleSuggestion
+      tags: [rules]
+      parameters: [{$ref: "#/components/parameters/RuleId"}, {$ref: "#/components/parameters/Analyst"}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [expected_version]
+              properties:
+                expected_version: {type: integer}
+                reason: {type: string}
+      responses:
+        "200": {$ref: "#/components/responses/Rule"}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "409": {$ref: "#/components/responses/Conflict"}
+        "502": {$ref: "#/components/responses/Unavailable"}
+
+  /rule-suggestions/{rule_id}/reject:
+    post:
+      operationId: rejectRuleSuggestion
+      tags: [rules]
+      parameters: [{$ref: "#/components/parameters/RuleId"}, {$ref: "#/components/parameters/Analyst"}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [expected_version, reason]
+              properties:
+                expected_version: {type: integer}
+                reason: {type: string, minLength: 1}
+      responses:
+        "200": {$ref: "#/components/responses/Rule"}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "409": {$ref: "#/components/responses/Conflict"}
+        "502": {$ref: "#/components/responses/Unavailable"}
+
+  /ops/health:
+    get:
+      operationId: getHealth
+      tags: [ops]
+      responses:
+        "200":
+          description: Pipeline health
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Health"}
+        "502": {$ref: "#/components/responses/Unavailable"}
+
+components:
+  parameters:
+    CaseId: {name: case_id, in: path, required: true, schema: {type: integer}}
+    RuleId: {name: rule_id, in: path, required: true, schema: {type: integer}}
+    ProposalId: {name: proposal_id, in: path, required: true, schema: {type: string, format: uuid}}
+    Analyst:
+      name: X-Analyst
+      in: header
+      required: true
+      description: The analyst recording the decision (fixed name in the lab; no authentication).
+      schema: {type: string, minLength: 1}
+
+  responses:
+    Proposal:
+      description: The proposal after the change
+      content:
+        application/json:
+          schema: {$ref: "#/components/schemas/ActionProposal"}
+    Rule:
+      description: The rule with its versions
+      content:
+        application/json:
+          schema: {$ref: "#/components/schemas/Rule"}
+    BadRequest:
+      description: Field-level errors
+      content:
+        application/json:
+          schema: {$ref: "#/components/schemas/FieldErrors"}
+    NotFound:
+      description: No such resource
+      content:
+        application/json:
+          schema: {$ref: "#/components/schemas/Problem"}
+    Conflict:
+      description: Refused; `error` says why and nothing was changed except a superseded/expired mark.
+      content:
+        application/json:
+          schema: {$ref: "#/components/schemas/Problem"}
+    Unavailable:
+      description: pipeline-api could not be reached
+      content:
+        application/json:
+          schema: {$ref: "#/components/schemas/Problem"}
+
+  schemas:
+    Problem:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
+          description: |
+            not_found, pipeline_unavailable; proposals: case_changed, investigation_changed, expired,
+            hash_mismatch, already_decided, not_undoable; cases: version_changed, not_open;
+            rules: version_changed, invalid_state, simulation_required.
+        message: {type: string}
+        current_version: {type: [integer, "null"]}
+        status: {type: [string, "null"]}
+        merged_into: {type: [integer, "null"]}
+        proposal: {oneOf: [{$ref: "#/components/schemas/ActionProposal"}, {type: "null"}]}
+
+    FieldError:
+      type: object
+      required: [loc, msg]
+      properties:
+        loc: {type: string}
+        msg: {type: string}
+    FieldErrors:
+      type: object
+      required: [errors]
+      properties:
+        errors: {type: array, items: {$ref: "#/components/schemas/FieldError"}}
+
+    ReasonBody:
+      type: object
+      additionalProperties: false
+      required: [reason]
+      properties:
+        reason: {type: string, minLength: 1}
+
+    CaseStatus: {type: string, enum: [open, closed, merged]}
+    Entities:
+      type: object
+      required: [hosts, users, ips]
+      properties:
+        hosts: {type: array, items: {type: string}}
+        users: {type: array, items: {type: string}}
+        ips: {type: array, items: {type: string}}
+
+    CaseSummary:
+      type: object
+      required: [case_id, version, status, severity, entities, opened_at, updated_at, merged_into,
+                 related_case_ids, alert_count]
+      properties:
+        case_id: {type: integer}
+        version: {type: integer}
+        status: {$ref: "#/components/schemas/CaseStatus"}
+        severity: {type: integer, minimum: 1, maximum: 5}
+        entities: {$ref: "#/components/schemas/Entities"}
+        opened_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+        merged_into: {type: [integer, "null"]}
+        related_case_ids: {type: array, items: {type: integer}}
+        alert_count: {type: integer}
+      example:
+        {case_id: 41, version: 3, status: open, severity: 5,
+         entities: {hosts: [web-srv-01], users: [www-data], ips: []},
+         opened_at: "2026-11-07T10:00:00Z", updated_at: "2026-11-07T10:04:00Z",
+         merged_into: null, related_case_ids: [], alert_count: 3}
+
+    AgentStatus: {type: string, enum: [pending, investigating, done, failed, superseded]}
+    QueueItem:
+      allOf:
+        - {$ref: "#/components/schemas/CaseSummary"}
+        - type: object
+          required: [agent_status]
+          properties:
+            agent_status: {$ref: "#/components/schemas/AgentStatus"}
+
+    Alert:
+      type: object
+      description: contracts.alerts.NormalizedAlert
+      required: [alert_id, source, vendor_event_id, time, severity, category, entities]
+      properties:
+        alert_id: {type: string, format: uuid}
+        source: {type: string}
+        vendor_event_id: {type: string}
+        time: {type: string, format: date-time}
+        severity: {type: integer, minimum: 1, maximum: 5}
+        category: {type: string}
+        technique: {type: [string, "null"]}
+        entities:
+          type: object
+          properties:
+            host: {type: [string, "null"]}
+            user: {type: [string, "null"]}
+            ip: {type: [string, "null"]}
+        process:
+          oneOf:
+            - type: "null"
+            - type: object
+              required: [cmd, user, pid]
+              properties:
+                cmd: {type: string}
+                user: {type: [string, "null"]}
+                pid: {type: integer}
+                parent_cmd: {type: [string, "null"]}
+                ancestors:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      cmd: {type: string}
+                      user: {type: [string, "null"]}
+                      pid: {type: integer}
+        network:
+          oneOf:
+            - type: "null"
+            - type: object
+              properties:
+                dst_ip: {type: string}
+                dst_port: {type: integer}
+        file:
+          oneOf:
+            - type: "null"
+            - type: object
+              properties:
+                path: {type: string}
+                mode: {type: string, enum: [read, write]}
+        raw: {type: object, additionalProperties: true}
+
+    Enrichment:
+      type: object
+      required: [assets, users, intel, geo]
+      properties:
+        assets:
+          type: object
+          additionalProperties:
+            type: object
+            properties:
+              owner: {type: string}
+              criticality: {type: string, enum: [low, medium, high, critical]}
+              os: {type: string}
+        users:
+          type: object
+          additionalProperties:
+            type: object
+            properties:
+              department: {type: string}
+              usual_country: {type: string}
+              vip: {type: boolean}
+        intel:
+          type: object
+          additionalProperties:
+            type: object
+            properties:
+              reputation: {type: string, enum: [malicious, suspicious, unknown]}
+              source: {type: [string, "null"]}
+        geo:
+          type: object
+          additionalProperties:
+            type: object
+            properties:
+              country: {type: string}
+              city: {type: string}
+
+    CaseEvent:
+      type: object
+      required: [id, version, kind, data, at]
+      properties:
+        id: {type: integer}
+        version: {type: integer}
+        kind: {type: string, description: "e.g. rule_decision, suppressed, closed, merged"}
+        data: {type: object, additionalProperties: true}
+        at: {type: string, format: date-time}
+
+    CaseDetail:
+      type: object
+      required: [case_id, version, status, severity, entities, alerts, opened_at, updated_at, merged_into,
+                 related_case_ids, enrichment, events, verdict, closed_by, close_note, closed_at]
+      properties:
+        schema_version: {type: string}
+        case_id: {type: integer}
+        version: {type: integer}
+        status: {$ref: "#/components/schemas/CaseStatus"}
+        severity: {type: integer, minimum: 1, maximum: 5}
+        entities: {$ref: "#/components/schemas/Entities"}
+        alerts: {type: array, items: {$ref: "#/components/schemas/Alert"}}
+        opened_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+        merged_into: {type: [integer, "null"]}
+        related_case_ids: {type: array, items: {type: integer}}
+        enrichment: {oneOf: [{$ref: "#/components/schemas/Enrichment"}, {type: "null"}]}
+        events: {type: array, items: {$ref: "#/components/schemas/CaseEvent"}}
+        verdict: {type: [string, "null"]}
+        closed_by: {type: [string, "null"]}
+        close_note: {type: [string, "null"]}
+        closed_at: {type: [string, "null"], format: date-time}
+
+    RuleStatus: {type: string, enum: [suggested, approved, active, expired, rejected]}
+    Condition:
+      type: object
+      additionalProperties: false
+      required: [field, op]
+      properties:
+        field: {type: string}
+        op: {type: string}
+        value: {}
+        quantifier: {type: [string, "null"], enum: [any, all, null]}
+    Group:
+      type: object
+      additionalProperties: false
+      properties:
+        all:
+          type: [array, "null"]
+          items: {anyOf: [{$ref: "#/components/schemas/Condition"}, {$ref: "#/components/schemas/Group"}]}
+        any:
+          type: [array, "null"]
+          items: {anyOf: [{$ref: "#/components/schemas/Condition"}, {$ref: "#/components/schemas/Group"}]}
+    RuleDefinition:
+      type: object
+      description: contracts.rules.RuleDefinition
+      required: [name, priority, action, reason, suggested_by]
+      properties:
+        name: {type: string}
+        priority: {type: integer}
+        case_conditions: {oneOf: [{$ref: "#/components/schemas/Group"}, {type: "null"}]}
+        alert_conditions: {oneOf: [{$ref: "#/components/schemas/Group"}, {type: "null"}]}
+        action:
+          type: object
+          required: [type]
+          properties:
+            type: {type: string, enum: [auto_close, set_severity, route_triage]}
+            verdict: {type: [string, "null"], enum: [benign, false_positive, null]}
+            severity: {type: [integer, "null"]}
+        reason: {type: string}
+        valid_from: {type: [string, "null"], format: date-time}
+        valid_until: {type: [string, "null"], format: date-time}
+        suggested_by: {type: string}
+        evidence_case_ids: {type: array, items: {type: integer}}
+    RuleVersion:
+      type: object
+      required: [version, status, definition, changed_by, changed_at, note]
+      properties:
+        version: {type: integer}
+        status: {$ref: "#/components/schemas/RuleStatus"}
+        definition: {$ref: "#/components/schemas/RuleDefinition"}
+        changed_by: {type: string}
+        changed_at: {type: string, format: date-time}
+        note: {type: [string, "null"]}
+    Rule:
+      type: object
+      required: [rule_id, version, status, definition, created_at, updated_at, versions]
+      properties:
+        rule_id: {type: integer}
+        version: {type: integer}
+        status: {$ref: "#/components/schemas/RuleStatus"}
+        definition: {$ref: "#/components/schemas/RuleDefinition"}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+        versions: {type: array, items: {$ref: "#/components/schemas/RuleVersion"}}
+
+    MatchCount:
+      type: object
+      required: [count, sample_case_ids]
+      properties:
+        count: {type: integer}
+        sample_case_ids: {type: array, items: {type: integer}}
+    SimulationResult:
+      type: object
+      required: [simulation_id, lookback_days, cases_considered, full, partial, full_marked_malicious,
+                 full_ground_truth_attacks]
+      properties:
+        simulation_id: {type: string, format: uuid}
+        lookback_days: {type: integer}
+        cases_considered: {type: integer}
+        full: {$ref: "#/components/schemas/MatchCount"}
+        partial: {$ref: "#/components/schemas/MatchCount"}
+        full_marked_malicious: {type: integer}
+        full_ground_truth_attacks: {type: integer}
+
+    Health:
+      type: object
+      required: [consumer_lag, outbox, dlq, last_pull]
+      properties:
+        consumer_lag:
+          type: array
+          items:
+            type: object
+            required: [group, topic, lag]
+            properties:
+              group: {type: string}
+              topic: {type: string}
+              lag: {type: [integer, "null"]}
+        outbox:
+          type: object
+          required: [backlog, oldest_unsent_age_s, failed]
+          properties:
+            backlog: {type: integer}
+            oldest_unsent_age_s: {type: [number, "null"]}
+            failed: {type: integer}
+        dlq:
+          type: object
+          required: [messages]
+          properties:
+            messages: {type: integer}
+        last_pull:
+          type: object
+          description: vendor → time of the last successful pull, null if never
+          additionalProperties: {type: [string, "null"], format: date-time}
+
+    ProposalStatus:
+      type: string
+      enum: [proposed, approved, rejected, superseded, expired, executing, succeeded, failed]
+    Target:
+      type: object
+      required: [vendor, resource_id]
+      properties:
+        vendor: {type: string, enum: [sentrix-edr, keyline-idp, nimbus-cloud]}
+        resource_id: {type: string}
+    ActionProposal:
+      type: object
+      description: contracts.agent.ActionProposal (spec 8)
+      required: [proposal_id, case_id, case_version, investigation_id, evidence_hash, action_type, target, params,
+                 rationale, approval_hash, created_at, expires_at, status]
+      properties:
+        schema_version: {type: string, const: "1"}
+        proposal_id: {type: string, format: uuid}
+        case_id: {type: integer}
+        case_version: {type: integer}
+        investigation_id: {type: string, format: uuid}
+        evidence_hash: {type: string}
+        action_type:
+          type: string
+          enum: [contain_host, release_host, suspend_user, unsuspend_user, disable_key, enable_key]
+        reverses_proposal_id: {type: [string, "null"], format: uuid}
+        target: {$ref: "#/components/schemas/Target"}
+        params: {type: object, additionalProperties: true}
+        rationale: {type: string}
+        approval_hash: {type: string}
+        created_at: {type: string, format: date-time}
+        expires_at: {type: string, format: date-time}
+        status: {$ref: "#/components/schemas/ProposalStatus"}
+
+    EvidenceItem:
+      type: object
+      required: [tool, args, result_digest, result_excerpt, captured_at]
+      properties:
+        tool: {type: string}
+        args: {type: object, additionalProperties: true}
+        result_digest: {type: string, pattern: "^[0-9a-f]{64}$"}
+        result_excerpt: {type: string}
+        captured_at: {type: string, format: date-time}
+    AgentStep:
+      type: object
+      required: [index, kind, name, started_at, duration_ms, tokens_in, tokens_out, summary]
+      properties:
+        index: {type: integer}
+        kind: {type: string, enum: [llm, tool]}
+        name: {type: string}
+        started_at: {type: string, format: date-time}
+        duration_ms: {type: integer}
+        tokens_in: {type: integer}
+        tokens_out: {type: integer}
+        summary: {type: string}
+    InvestigationView:
+      type: object
+      description: contracts.agent.InvestigationSnapshot plus the agent's step trace
+      required: [investigation_id, case_id, case_version, verdict, confidence, rationale, evidence, evidence_hash,
+                 completed_at, steps]
+      properties:
+        schema_version: {type: string, const: "1"}
+        investigation_id: {type: string, format: uuid}
+        case_id: {type: integer}
+        case_version: {type: integer}
+        verdict: {type: string, enum: [malicious, benign, false_positive, inconclusive]}
+        confidence: {type: number, minimum: 0, maximum: 1}
+        rationale: {type: string}
+        evidence: {type: array, items: {$ref: "#/components/schemas/EvidenceItem"}}
+        evidence_hash: {type: string}
+        completed_at: {type: string, format: date-time}
+        steps: {type: array, items: {$ref: "#/components/schemas/AgentStep"}}
+    Investigations:
+      type: object
+      required: [case_id, agent_status, latest, history]
+      properties:
+        case_id: {type: integer}
+        agent_status: {$ref: "#/components/schemas/AgentStatus"}
+        latest: {oneOf: [{$ref: "#/components/schemas/InvestigationView"}, {type: "null"}]}
+        history:
+          type: array
+          description: earlier investigations, newest first
+          items: {$ref: "#/components/schemas/InvestigationView"}

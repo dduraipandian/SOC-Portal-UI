@@ -1,0 +1,14 @@
+name: soc-portal-ui
+
+# The analyst portal. It calls only /api/*, which nginx forwards to PORTAL_BACKEND_URL.
+# Default: the backend running on the Mac on port 8000 (for example `uv run` in agentic_soc).
+services:
+  portal-ui:
+    image: soc-portal-ui
+    build: {context: .}
+    environment:
+      PORTAL_BACKEND_URL: ${PORTAL_BACKEND_URL:-http://host.docker.internal:8000}
+    extra_hosts: ["host.docker.internal:host-gateway"]
+    ports: ["127.0.0.1:8120:80"]
+    restart: unless-stopped
+    mem_limit: 64m

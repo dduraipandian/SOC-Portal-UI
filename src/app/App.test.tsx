@@ -1,0 +1,31 @@
+import { screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { http, HttpResponse } from "msw";
+import { api } from "../test/handlers";
+import { renderAt } from "../test/render";
+import { server } from "../test/server";
+
+test("navigation shows the five screens and the analyst name", async () => {
+  renderAt("/");
+  const nav = screen.getByRole("navigation");
+  for (const name of ["Queue", "Proposals", "Rules", "Pipeline health"]) {
+    expect(nav).toHaveTextContent(name);
+  }
+  expect(screen.getByRole("link", { name: "Queue" })).toHaveAttribute("href", "/");
+  expect(screen.getByText(/signed in as analyst/i)).toBeInTheDocument();
+  expect(await screen.findByText("#41")).toBeInTheDocument();
+});
+
+test("an API failure shows ErrorState with retry, not a blank page", async () => {
+  let calls = 0;
+  server.use(http.get(api("/queue"), () => {
+    calls += 1;
+    return HttpResponse.json({ error: "pipeline_unavailable", message: "down" }, { status: 502 });
+  }));
+  renderAt("/");
+  const alert = await screen.findByRole("alert");
+  expect(alert).toHaveTextContent(/portal backend is not answering/i);
+  const before = calls;
+  await userEvent.click(screen.getByRole("button", { name: "Try again" }));
+  await vi.waitFor(() => expect(calls).toBeGreaterThan(before));
+});
