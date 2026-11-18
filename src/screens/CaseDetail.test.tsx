@@ -31,9 +31,12 @@ test("investigation shows verdict, evidence excerpt, evidence_hash and agent ste
   expect(within(inv).getByText("e".repeat(64))).toBeInTheDocument();
   expect(inv).toHaveTextContent("edr.process_tree");
   const steps = section("Agent steps");
-  expect(within(steps).getAllByRole("row")).toHaveLength(1 + 3 + 1);   // header, 3 steps, total
+  const rows = within(steps).getAllByRole("row");
+  expect(rows).toHaveLength(1 + 1 + 3);                                // header, total, 3 steps
+  expect(rows[1]).toHaveTextContent("Total");                          // totals sit at the top
   expect(steps).toHaveTextContent("6,030");                            // tokens in + out
   expect(steps).toHaveTextContent("4.37 s");
+  expect(steps).toHaveTextContent("3 steps (2 model, 1 tool)");
 });
 
 test("merged case shows the banner and disables the verdict form", async () => {
