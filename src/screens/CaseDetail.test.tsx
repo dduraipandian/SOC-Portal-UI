@@ -162,9 +162,31 @@ test("investigation shows the evidence first, then the agent steps", async () =>
   expect(before(evidence, within(inv).getByRole("region", { name: "Agent steps" }))).toBe(true);
 });
 
+test("agent steps start collapsed, with the totals still showing", async () => {
+  renderAt("/cases/41");
+  const steps = await screen.findByRole("region", { name: "Agent steps" });
+  const box = steps.querySelector("details.steps-box") as HTMLDetailsElement;
+  expect(box).not.toBeNull();
+  expect(box.open).toBe(false);
+  const total = steps.querySelector("summary.steps-total")!;
+  expect(total).toBeVisible();
+  expect(total).toHaveTextContent("3 steps (2 model, 1 tool)");
+});
+
+test("opening the agent steps shows the timeline inside a scrolling box", async () => {
+  renderAt("/cases/41");
+  const steps = await screen.findByRole("region", { name: "Agent steps" });
+  const first = within(steps).getByText("Decide which tools to call.");
+  expect(first).not.toBeVisible();
+  await userEvent.click(steps.querySelector("summary.steps-total")!);
+  expect(first).toBeVisible();
+  expect(first.closest(".steps-scroll")).not.toBeNull();
+});
+
 test("agent steps are a timeline list with the totals first", async () => {
   renderAt("/cases/41");
   const steps = await screen.findByRole("region", { name: "Agent steps" });
+  await userEvent.click(steps.querySelector("summary.steps-total")!);
   const items = within(steps).getAllByRole("listitem");
   expect(items).toHaveLength(3);                                       // plan, tool, verdict
   expect(items[1]).toHaveTextContent("edr.process_tree");

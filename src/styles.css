@@ -267,8 +267,17 @@ label { display: inline-flex; flex-direction: column; gap: 3px; font-size: var(-
 .stack { display: flex; flex-direction: column; gap: var(--gap); }
 
 /* investigation: evidence, then the agent's steps as a timeline */
-.steps-total { margin: 0 0 10px; color: var(--ink-2); max-width: none; }
-.steps { list-style: none; margin: 0 0 22px; padding: 0; position: relative; }
+.steps-box { margin-bottom: 22px; }
+.steps-total {
+  list-style: none; cursor: pointer; color: var(--ink-2); padding: 10px 14px; border: 1px solid var(--rule);
+  border-radius: var(--radius); background: var(--panel);
+}
+.steps-total::-webkit-details-marker { display: none; }
+.steps-total::before { content: "▸"; color: var(--ink-3); margin-right: 10px; }
+.steps-box[open] .steps-total::before { content: "▾"; }
+.steps-total:hover { background: var(--panel-2); }
+.steps-scroll { max-height: 440px; overflow-y: auto; margin-top: 12px; padding-right: 8px; }
+.steps { list-style: none; margin: 0; padding: 0; position: relative; }
 .steps::before { content: ""; position: absolute; left: 15px; top: 8px; bottom: 8px; width: 2px; background: var(--rule); }
 .steps li { display: grid; grid-template-columns: 32px minmax(0, 1fr) auto; gap: 14px; padding: 8px 0; position: relative; }
 .steps .dot {
@@ -276,6 +285,7 @@ label { display: inline-flex; flex-direction: column; gap: 3px; font-size: var(-
   display: grid; place-items: center; font-size: 12px; color: var(--ink-2); position: relative; z-index: 1;
 }
 .steps .dot[data-kind="llm"] { border-color: color-mix(in srgb, var(--act) 60%, transparent); color: var(--act); }
+.steps .dot[data-kind="tool"] { font-size: 20px; line-height: 1; color: var(--ink); }
 .steps p { margin: 2px 0 0; color: var(--ink-2); max-width: 90ch; overflow-wrap: anywhere; }
 .steps .meta { color: var(--ink-3); font: 12px var(--mono); white-space: nowrap; text-align: right; }
 @media (max-width: 700px) { .steps li { grid-template-columns: 32px minmax(0, 1fr); } .steps .meta { grid-column: 2; text-align: left; } }
