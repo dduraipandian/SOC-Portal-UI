@@ -16,6 +16,17 @@ test("navigation shows the five screens and the analyst name", async () => {
   expect(await screen.findByText("#41")).toBeInTheDocument();
 });
 
+test("main navigation marks the current page and every link has a decorative icon", async () => {
+  renderAt("/");
+  expect(screen.getByRole("link", { name: "Queue" })).toHaveAttribute("aria-current", "page");
+  for (const name of ["Queue", "Proposals", "Rules", "Pipeline health"]) {
+    const icon = screen.getByRole("link", { name }).querySelector("svg");
+    expect(icon).not.toBeNull();
+    expect(icon).toHaveAttribute("aria-hidden", "true");
+  }
+  await screen.findByText("#41");
+});
+
 test("an API failure shows ErrorState with retry, not a blank page", async () => {
   let calls = 0;
   server.use(http.get(api("/queue"), () => {
