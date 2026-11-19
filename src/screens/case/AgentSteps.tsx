@@ -6,8 +6,10 @@ const n = (x: number) => x.toLocaleString("en-US");
 /** What the agent did, in order, as a vertical timeline: model steps marked "AI", tool calls marked with a gear.
  *  Collapsed by default (a long run would push everything below it far down the page); the totals stay visible in
  *  the summary line, and the opened timeline scrolls inside a fixed height. */
-export function AgentSteps({ steps, title = "Agent steps", defaultOpen = false }: {
-  steps: Schemas["AgentStep"][]; title?: string; defaultOpen?: boolean;
+export function AgentSteps({ steps, title = "Agent steps", open, onOpenChange }: {
+  steps: Schemas["AgentStep"][]; title?: string;
+  /** Controlled when given (the parent keeps it across investigations); otherwise the box manages itself, closed. */
+  open?: boolean; onOpenChange?: (open: boolean) => void;
 }) {
   const ms = steps.reduce((s, x) => s + x.duration_ms, 0);
   const tokens = steps.reduce((s, x) => s + x.tokens_in + x.tokens_out, 0);
@@ -15,7 +17,7 @@ export function AgentSteps({ steps, title = "Agent steps", defaultOpen = false }
   const count = `${steps.length} ${steps.length === 1 ? "step" : "steps"} (${llm} model, ${steps.length - llm} tool)`;
   return (
     <Section title={title}>
-      <details className="steps-box" open={defaultOpen}>
+      <details className="steps-box" open={open} onToggle={onOpenChange && ((e) => onOpenChange(e.currentTarget.open))}>
         <summary className="steps-total">
           <strong>Total</strong>: {count} · {(ms / 1000).toFixed(2)} s · {n(tokens)} tokens
         </summary>

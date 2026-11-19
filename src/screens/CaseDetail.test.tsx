@@ -209,6 +209,8 @@ const run = (n: number, over: Partial<Run> = {}): Run => ({
 const withRuns = (history: Run[], latest: Run | null = INVESTIGATIONS_41.latest!) =>
   server.use(http.get(api("/investigations/41"), () => HttpResponse.json({ ...INVESTIGATIONS_41, latest, history })));
 const cards = () => within(screen.getByRole("list", { name: "Investigations" })).getAllByRole("button");
+const stepsBox = () => screen.getByRole("region", { name: "Agent steps" }).querySelector("details") as HTMLDetailsElement;
+const toggleSteps = () => userEvent.click(stepsBox().querySelector("summary")!);
 const OLDER = run(1, {
   verdict: "benign", rationale: "Routine admin work.",
   evidence: [{ ...INVESTIGATIONS_41.latest!.evidence[0], tool: "older.tool", result_excerpt: "older excerpt" }],
@@ -221,10 +223,27 @@ test("investigations are cards with verdict, time and hash, the latest on the le
   renderAt("/cases/41");
   await screen.findByRole("list", { name: "Investigations" });
   const [latest, second, third] = cards();
-  for (const text of ["malicious", "Latest", "eeeeeeeeeeee", "2026-11-07 10:00 UTC"]) expect(latest).toHaveTextContent(text);
-  for (const text of ["benign", "010101010101", "2026-11-07 09:59 UTC"]) expect(second).toHaveTextContent(text);
-  for (const text of ["inconclusive", "020202020202", "2026-11-07 09:58 UTC"]) expect(third).toHaveTextContent(text);
+  for (const text of ["malicious", "Latest", "eeeeeeeeeeee"]) expect(latest).toHaveTextContent(text);
+  for (const text of ["benign", "010101010101"]) expect(second).toHaveTextContent(text);
+  for (const text of ["inconclusive", "020202020202"]) expect(third).toHaveTextContent(text);
   expect(second).not.toHaveTextContent("Latest");
+  // the time reads as an age; the exact UTC time is on hover
+  expect(within(latest).getByTitle("2026-11-07 10:00 UTC")).toHaveTextContent(/ago$/);
+  expect(within(second).getByTitle("2026-11-07 09:59 UTC")).toHaveTextContent(/ago$/);
+  expect(within(third).getByTitle("2026-11-07 09:58 UTC")).toHaveTextContent(/ago$/);
+});
+
+test("cards show how long ago each investigation finished", async () => {
+  const ago = (seconds: number) => new Date(Date.now() - seconds * 1000).toISOString();
+  withRuns(
+    [run(1, { completed_at: ago(3600) }), run(2, { completed_at: ago(86400) })],
+    { ...INVESTIGATIONS_41.latest!, completed_at: ago(300) },
+  );
+  renderAt("/cases/41");
+  await screen.findByRole("list", { name: "Investigations" });
+  expect(cards()[0]).toHaveTextContent("5 min ago");
+  expect(cards()[1]).toHaveTextContent("1 h ago");
+  expect(cards()[2]).toHaveTextContent("1 d ago");
 });
 
 test("only the latest 10 investigations are shown", async () => {
@@ -256,12 +275,13 @@ test("selecting a card loads that investigation's evidence and agent steps; the 
   withRuns([OLDER]);
   renderAt("/cases/41");
   await screen.findByRole("list", { name: "Investigations" });
+  await toggleSteps();                                                      // expanded before switching
   await userEvent.click(cards()[1]);
   expect(cards()[1]).toHaveAttribute("aria-pressed", "true");
   expect(cards()[0]).toHaveAttribute("aria-pressed", "false");
   const inv = screen.getByRole("region", { name: "Investigation" });
   const steps = within(inv).getByRole("region", { name: "Agent steps" });
-  expect(within(steps).getByText("An older run.")).toBeVisible();          // opened for you, not left collapsed
+  expect(within(steps).getByText("An older run.")).toBeVisible();
   expect(inv).toHaveTextContent("older excerpt");
   expect(inv).toHaveTextContent(/showing an earlier investigation/i);
   expect(inv).not.toHaveTextContent("edr.process_tree");                   // nothing left over from the latest run
@@ -270,6 +290,41 @@ test("selecting a card loads that investigation's evidence and agent steps; the 
   await userEvent.click(cards()[0]);
   expect(within(screen.getByRole("region", { name: "Investigation" })).getByText("edr.process_tree", { selector: "td" }))
     .toBeInTheDocument();
+});
+
+test("switching investigations keeps the agent steps collapsed", async () => {
+  withRuns([OLDER]);
+  renderAt("/cases/41");
+  await screen.findByRole("list", { name: "Investigations" });
+  expect(stepsBox().open).toBe(false);
+  await userEvent.click(cards()[1]);
+  expect(stepsBox().open).toBe(false);
+  expect(screen.getByText("An older run.")).not.toBeVisible();
+});
+
+test("switching investigations keeps the agent steps expanded", async () => {
+  withRuns([OLDER]);
+  renderAt("/cases/41");
+  await screen.findByRole("list", { name: "Investigations" });
+  await toggleSteps();
+  expect(stepsBox().open).toBe(true);
+  await userEvent.click(cards()[1]);
+  expect(stepsBox().open).toBe(true);
+  expect(screen.getByText("An older run.")).toBeVisible();
+  await userEvent.click(cards()[0]);
+  expect(stepsBox().open).toBe(true);
+});
+
+test("collapsing the steps stays collapsed for the next investigation you pick", async () => {
+  withRuns([OLDER]);
+  renderAt("/cases/41");
+  await screen.findByRole("list", { name: "Investigations" });
+  await toggleSteps();
+  await userEvent.click(cards()[1]);
+  await toggleSteps();                                                      // collapse it again
+  expect(stepsBox().open).toBe(false);
+  await userEvent.click(cards()[0]);
+  expect(stepsBox().open).toBe(false);
 });
 
 test("with no completed investigation there are no cards", async () => {

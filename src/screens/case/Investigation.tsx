@@ -2,6 +2,7 @@ import { useState } from "react";
 import type { Schemas } from "../../api/client";
 import { useInvestigations, useStartInvestigation } from "../../api/hooks";
 import { refusalText } from "../../api/problems";
+import { Age } from "../../components/Age";
 import { ErrorState } from "../../components/ErrorState";
 import { Section } from "../../components/Section";
 import { StatusBadge } from "../../components/StatusBadge";
@@ -13,8 +14,11 @@ type View = Schemas["InvestigationView"];
 /** The most investigations shown as cards: the latest run and the ones before it. */
 export const MAX_RUNS = 10;
 
-/** One investigation's evidence and its agent steps. `open` expands the steps (used when an analyst picked the run). */
-function Snapshot({ inv, open }: { inv: View; open: boolean }) {
+/** One investigation's evidence and its agent steps. Whether the steps are open is the parent's, so it carries over
+ *  from one investigation to the next. */
+function Snapshot({ inv, stepsOpen, onStepsOpenChange }: {
+  inv: View; stepsOpen: boolean; onStepsOpenChange: (open: boolean) => void;
+}) {
   return (
     <>
       <dl className="kv">
@@ -37,7 +41,7 @@ function Snapshot({ inv, open }: { inv: View; open: boolean }) {
           </tbody>
         </table>
       </div>
-      <AgentSteps steps={inv.steps} defaultOpen={open} />
+      <AgentSteps steps={inv.steps} open={stepsOpen} onOpenChange={onStepsOpenChange} />
     </>
   );
 }
@@ -54,7 +58,7 @@ function RunCards({ runs, selectedId, onSelect }: { runs: View[]; selectedId: st
               <strong className="run-verdict">{r.verdict.replace(/_/g, " ")}</strong>
               {i === 0 && <span className="run-latest">Latest</span>}
             </span>
-            <time dateTime={r.completed_at}>{formatUtc(r.completed_at)}</time>
+            <Age at={r.completed_at} />
             <span className="hash" title={r.evidence_hash}>{r.evidence_hash.slice(0, 12)}</span>
           </button>
         </li>
@@ -93,6 +97,7 @@ function StartButton({ caseId, status }: { caseId: number; status: Schemas["Agen
 export function Investigation({ caseId }: { caseId: number }) {
   const q = useInvestigations(caseId);
   const [picked, setPicked] = useState<string | null>(null);
+  const [stepsOpen, setStepsOpen] = useState(false);          // kept across investigations: closed stays closed
   const latest = q.data?.latest ?? null;
   const runs = latest ? [latest, ...(q.data?.history ?? [])].slice(0, MAX_RUNS) : [];
   // a picked run that has dropped out of the list (or none picked yet) means the latest
@@ -113,8 +118,9 @@ export function Investigation({ caseId }: { caseId: number }) {
                   {formatUtc(selected.completed_at)}. The case summary above is from the latest one.
                 </p>
               )}
-              {/* keyed so each pick starts fresh, with its steps opened when the analyst chose it */}
-              <Snapshot key={selected.investigation_id} inv={selected} open={picked !== null} />
+              {/* keyed so each pick starts fresh (the steps list back at the top); open/closed is carried by the parent */}
+              <Snapshot key={selected.investigation_id} inv={selected} stepsOpen={stepsOpen}
+                        onStepsOpenChange={setStepsOpen} />
             </>
           ) : (
             <p className="muted">No completed investigation yet.</p>
