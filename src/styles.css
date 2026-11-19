@@ -141,6 +141,10 @@ table.grid { width: 100%; border-collapse: collapse; background: var(--panel); b
   padding: 8px 12px; border-radius: 3px; margin: 0 0 var(--gap); display: flex; gap: 12px; align-items: center;
 }
 .error-state p, .refusal p { margin: 0; }
+/* a failed run: the reason, then its steps underneath (stacked, not side by side like a one-line refusal) */
+.refusal.failure { display: block; }
+.refusal.failure p + p { margin-top: 4px; }
+.refusal.failure section { margin-top: var(--gap); }
 .banner { border-left: 3px solid var(--warn); background: var(--warn-bg); padding: 8px 12px; margin: 0 0 var(--gap); }
 
 /* forms and buttons */

@@ -82,7 +82,7 @@ export const CASE_57 = caseDetail({
 export const CASE_52 = caseDetail({ case_id: 52, version: 2, status: "merged", merged_into: 41, severity: 3 });
 
 export const INVESTIGATIONS_41: S["Investigations"] = {
-  case_id: 41, agent_status: "done", history: [],
+  case_id: 41, agent_status: "done", history: [], last_failure: null,
   latest: {
     schema_version: "1", investigation_id: "aaaaaaaa-0000-0000-0000-000000000041", case_id: 41, case_version: 3,
     verdict: "malicious", confidence: 0.82, rationale: "Beaconing to a known-bad IP from web-srv-01.",

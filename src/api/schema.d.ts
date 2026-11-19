@@ -33,7 +33,11 @@ export interface paths {
         };
         get: operations["getInvestigations"];
         put?: never;
-        post?: never;
+        /**
+         * Start an investigation of the case now. It runs in the background: the case's agent_status is
+         *     `investigating` until it ends, and GET shows the result. Refused while a run of the case is active.
+         */
+        post: operations["startInvestigation"];
         delete?: never;
         options?: never;
         head?: never;
@@ -309,7 +313,7 @@ export interface components {
             /**
              * @description not_found, pipeline_unavailable; proposals: case_changed, investigation_changed, expired,
              *     hash_mismatch, already_decided, not_undoable; cases: version_changed, not_open;
-             *     rules: version_changed, invalid_state, simulation_required.
+             *     rules: version_changed, invalid_state, simulation_required; investigations: already_investigating.
              */
             error: string;
             message?: string;
@@ -646,6 +650,25 @@ export interface components {
             latest: components["schemas"]["InvestigationView"] | null;
             /** @description earlier investigations, newest first */
             history: components["schemas"]["InvestigationView"][];
+            /** @description the newest run, when it failed; null when the newest run produced a verdict or none ran yet */
+            last_failure: components["schemas"]["InvestigationFailure"] | null;
+        };
+        /** @description a run that ended without a verdict, and what it did before it stopped */
+        InvestigationFailure: {
+            /** Format: uuid */
+            investigation_id: string;
+            case_version: number;
+            /** @description why it stopped, e.g. Agent step limit reached. */
+            error: string;
+            /** Format: date-time */
+            completed_at: string;
+            duration_ms: number;
+            steps: components["schemas"]["AgentStep"][];
+        };
+        InvestigationStarted: {
+            case_id: number;
+            /** @constant */
+            agent_status: "investigating";
         };
     };
     responses: {
@@ -766,6 +789,34 @@ export interface operations {
                 };
             };
             404: components["responses"]["NotFound"];
+            502: components["responses"]["Unavailable"];
+        };
+    };
+    startInvestigation: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description The analyst recording the decision (fixed name in the lab; no authentication). */
+                "X-Analyst": components["parameters"]["Analyst"];
+            };
+            path: {
+                case_id: components["parameters"]["CaseId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Started */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InvestigationStarted"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
             502: components["responses"]["Unavailable"];
         };
     };

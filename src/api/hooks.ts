@@ -110,6 +110,13 @@ export const useUndo = () =>
     PROPOSAL_VIEWS,
   );
 
+/** Starts a background run; the investigations poll shows it ending. A 409 means one is already running. */
+export const useStartInvestigation = (caseId: number) =>
+  useDecision(
+    () => unwrap(api.POST("/investigations/{case_id}", { params: { path: { case_id: caseId }, header } })),
+    [["investigations", caseId], ["queue"]],
+  );
+
 export const useSetVerdict = (caseId: number) =>
   useDecision(
     (v: { verdict: "malicious" | "benign" | "false_positive"; note: string; expectedVersion: number }) =>

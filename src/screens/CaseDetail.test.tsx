@@ -119,3 +119,40 @@ test("enrichment shows the destinations alerts connected to, with their reputati
   expect(row).toHaveTextContent("malicious");
   expect(row).toHaveTextContent("destination");
 });
+
+test("a failed last run says why it stopped and shows the steps it took", async () => {
+  server.use(http.get(api("/investigations/41"), () => HttpResponse.json({
+    ...INVESTIGATIONS_41, agent_status: "failed",
+    last_failure: { investigation_id: "cccccccc-0000-0000-0000-000000000041", case_version: 3,
+                    error: "Agent step limit reached.", completed_at: "2026-11-07T10:06:00Z", duration_ms: 23304,
+                    steps: INVESTIGATIONS_41.latest!.steps },
+  })));
+  renderAt("/cases/41");
+  const inv = await screen.findByRole("region", { name: "Investigation" });
+  const failure = await within(inv).findByText(/the last investigation failed/i);
+  expect(failure.closest("[role=alert]")).toHaveTextContent("Agent step limit reached.");
+  expect(failure.closest("[role=alert]")).toHaveTextContent("after 23.3 s");
+  expect(section("Steps before it failed")).toHaveTextContent("3 steps (2 model, 1 tool)");
+});
+
+test("Run investigation starts a run with the X-Analyst header; a 409 says one is already running", async () => {
+  let analyst: string | null = null;
+  server.use(http.post(api("/investigations/41"), ({ request }) => {
+    analyst = request.headers.get("X-Analyst");
+    return HttpResponse.json({ error: "already_investigating" }, { status: 409 });
+  }));
+  renderAt("/cases/41");
+  const inv = await screen.findByRole("region", { name: "Investigation" });
+  await userEvent.click(await within(inv).findByRole("button", { name: "Run investigation" }));
+  expect(await within(inv).findByRole("alert")).toHaveTextContent("The agent is already investigating this case.");
+  expect(analyst).toBe("analyst");
+});
+
+test("Run investigation is disabled while the agent is investigating", async () => {
+  server.use(http.get(api("/investigations/41"), () => HttpResponse.json({
+    ...INVESTIGATIONS_41, agent_status: "investigating",
+  })));
+  renderAt("/cases/41");
+  const inv = await screen.findByRole("region", { name: "Investigation" });
+  expect(await within(inv).findByRole("button", { name: "Investigating…" })).toBeDisabled();
+});

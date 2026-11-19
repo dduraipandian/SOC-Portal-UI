@@ -53,6 +53,22 @@ paths:
               schema: {$ref: "#/components/schemas/Investigations"}
         "404": {$ref: "#/components/responses/NotFound"}
         "502": {$ref: "#/components/responses/Unavailable"}
+    post:
+      operationId: startInvestigation
+      tags: [agent]
+      summary: |
+        Start an investigation of the case now. It runs in the background: the case's agent_status is
+        `investigating` until it ends, and GET shows the result. Refused while a run of the case is active.
+      parameters: [{$ref: "#/components/parameters/CaseId"}, {$ref: "#/components/parameters/Analyst"}]
+      responses:
+        "202":
+          description: Started
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/InvestigationStarted"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "409": {$ref: "#/components/responses/Conflict"}
+        "502": {$ref: "#/components/responses/Unavailable"}
 
   /proposals:
     get:
@@ -406,7 +422,7 @@ components:
           description: |
             not_found, pipeline_unavailable; proposals: case_changed, investigation_changed, expired,
             hash_mismatch, already_decided, not_undoable; cases: version_changed, not_open;
-            rules: version_changed, invalid_state, simulation_required.
+            rules: version_changed, invalid_state, simulation_required; investigations: already_investigating.
         message: {type: string}
         current_version: {type: [integer, "null"]}
         status: {type: [string, "null"]}
@@ -776,7 +792,7 @@ components:
         steps: {type: array, items: {$ref: "#/components/schemas/AgentStep"}}
     Investigations:
       type: object
-      required: [case_id, agent_status, latest, history]
+      required: [case_id, agent_status, latest, history, last_failure]
       properties:
         case_id: {type: integer}
         agent_status: {$ref: "#/components/schemas/AgentStatus"}
@@ -785,3 +801,23 @@ components:
           type: array
           description: earlier investigations, newest first
           items: {$ref: "#/components/schemas/InvestigationView"}
+        last_failure:
+          description: the newest run, when it failed; null when the newest run produced a verdict or none ran yet
+          oneOf: [{$ref: "#/components/schemas/InvestigationFailure"}, {type: "null"}]
+    InvestigationFailure:
+      type: object
+      description: a run that ended without a verdict, and what it did before it stopped
+      required: [investigation_id, case_version, error, completed_at, duration_ms, steps]
+      properties:
+        investigation_id: {type: string, format: uuid}
+        case_version: {type: integer}
+        error: {type: string, description: "why it stopped, e.g. Agent step limit reached."}
+        completed_at: {type: string, format: date-time}
+        duration_ms: {type: integer}
+        steps: {type: array, items: {$ref: "#/components/schemas/AgentStep"}}
+    InvestigationStarted:
+      type: object
+      required: [case_id, agent_status]
+      properties:
+        case_id: {type: integer}
+        agent_status: {type: string, const: investigating}
