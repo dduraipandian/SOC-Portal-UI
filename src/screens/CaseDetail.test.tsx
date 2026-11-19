@@ -22,13 +22,55 @@ test("S6 partial match: the suppressed alert is marked with its rule and the rul
   expect(trace).toHaveTextContent("auto close");
 });
 
-test("investigation shows verdict, evidence excerpt, evidence_hash and agent steps with token total", async () => {
+test("summary leads with the agent verdict, confidence and rationale", async () => {
+  renderAt("/cases/41");
+  const summary = await screen.findByRole("region", { name: "Summary" });
+  await within(summary).findByText("malicious");
+  expect(summary).toHaveTextContent("82% confidence");
+  expect(summary).toHaveTextContent("Beaconing to a known-bad IP from web-srv-01.");
+});
+
+test("summary says the agent has not finished when there is no verdict", async () => {
+  server.use(http.get(api("/investigations/41"), () => HttpResponse.json({
+    ...INVESTIGATIONS_41, latest: null, agent_status: "pending",
+  })));
+  renderAt("/cases/41");
+  const summary = await screen.findByRole("region", { name: "Summary" });
+  await within(summary).findByText(/no completed investigation yet/i);
+  expect(summary).toHaveTextContent("pending");
+});
+
+test("summary shows why the last run failed when there is no verdict", async () => {
+  server.use(http.get(api("/investigations/41"), () => HttpResponse.json({
+    ...INVESTIGATIONS_41, latest: null, agent_status: "failed",
+    last_failure: { investigation_id: "bbbbbbbb-0000-0000-0000-000000000041", case_version: 3, error: "Agent step limit reached.",
+                    completed_at: "2026-11-07T10:05:00Z", duration_ms: 9000, steps: [] },
+  })));
+  renderAt("/cases/41");
+  const summary = await screen.findByRole("region", { name: "Summary" });
+  await within(summary).findByText(/agent step limit reached/i);
+});
+
+test("summary flags a verdict written for an older version of the case", async () => {
+  server.use(http.get(api("/cases/41"), () => HttpResponse.json(caseDetail({ version: 5 }))));
+  renderAt("/cases/41");
+  const summary = await screen.findByRole("region", { name: "Summary" });
+  await within(summary).findByText("Based on v3; the case is now v5.");
+});
+
+test("the case page reads summary, investigation, then alerts", async () => {
+  renderAt("/cases/41");
+  const summary = await screen.findByRole("region", { name: "Summary" });
+  const inv = screen.getByRole("region", { name: "Investigation" });
+  const alerts = screen.getByRole("region", { name: "Alerts" });
+  expect(summary.compareDocumentPosition(inv) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  expect(inv.compareDocumentPosition(alerts) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+});
+
+test("investigation shows evidence excerpt, evidence_hash and agent steps with token total", async () => {
   renderAt("/cases/41");
   const inv = await screen.findByRole("region", { name: "Investigation" });
-  await within(inv).findByText("malicious");
-  expect(inv).toHaveTextContent("82%");
-  expect(inv).toHaveTextContent("Beaconing to a known-bad IP from web-srv-01.");
-  expect(within(inv).getByText("e".repeat(64))).toBeInTheDocument();
+  await within(inv).findByText("e".repeat(64));
   expect(inv).toHaveTextContent("edr.process_tree");
   const steps = section("Agent steps");
   const rows = within(steps).getAllByRole("row");
@@ -61,6 +103,7 @@ test("alert command and evidence excerpt render as text", async () => {   // RF3
   const inv = await screen.findByRole("region", { name: "Investigation" });
   await within(inv).findAllByText(XSS);
   expect(within(section("Alerts")).getAllByText(XSS).length).toBeGreaterThan(0);
+  expect(within(section("Summary")).getAllByText(XSS).length).toBeGreaterThan(0);
   expect(container.querySelector("img")).toBeNull();
 });
 

@@ -12,6 +12,7 @@ import { Enrichment } from "./case/Enrichment";
 import { Investigation } from "./case/Investigation";
 import { RelatedCases } from "./case/RelatedCases";
 import { RuleTrace } from "./case/RuleTrace";
+import { Summary } from "./case/Summary";
 import { Timeline } from "./case/Timeline";
 import { VerdictForm } from "./case/VerdictForm";
 
@@ -36,7 +37,7 @@ export function CaseDetail() {
       {q.error && <ErrorState error={q.error} onRetry={() => q.refetch()} lastUpdated={c ? q.dataUpdatedAt : undefined} />}
       {c && (
         <>
-          <header className="case-head">
+          <header className="page-head card">
             <h1>Case #{c.case_id} <span className="muted">v{c.version}</span></h1>
             <p>
               <Severity level={c.severity} /> <StatusBadge status={c.status} /> opened <Age at={c.opened_at} />,
@@ -56,11 +57,12 @@ export function CaseDetail() {
           )}
           <div className="case-layout">
             <div>
+              <Summary c={c} />
+              <Investigation caseId={c.case_id} />
               <Alerts c={c} />
               <Timeline c={c} />
               <Enrichment c={c} />
               <RuleTrace c={c} />
-              <Investigation caseId={c.case_id} />
               <RelatedCases c={c} />
             </div>
             <aside className="decisions" aria-label="Decisions">

@@ -13,9 +13,7 @@ function Snapshot({ inv }: { inv: View }) {
   return (
     <>
       <dl className="kv">
-        <dt>Verdict</dt><dd><strong>{inv.verdict}</strong> ({Math.round(inv.confidence * 100)}% confidence)</dd>
-        <dt>For version</dt><dd>v{inv.case_version}, completed {formatUtc(inv.completed_at)}</dd>
-        <dt>Rationale</dt><dd>{inv.rationale}</dd>
+        <dt>Completed</dt><dd>{formatUtc(inv.completed_at)}, for v{inv.case_version}</dd>
         <dt>Evidence hash</dt><dd className="hash">{inv.evidence_hash}</dd>
       </dl>
       <h3>Evidence</h3>
