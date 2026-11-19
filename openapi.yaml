@@ -786,7 +786,7 @@ components:
       required: [index, kind, name, started_at, duration_ms, tokens_in, tokens_out, summary]
       properties:
         index: {type: integer}
-        kind: {type: string, enum: [llm, tool]}
+        kind: {type: string, enum: [request, llm, tool], description: "request: what the agent was asked (first); llm: a model call; tool: a tool call"}
         name: {type: string}
         started_at: {type: string, format: date-time}
         duration_ms: {type: integer}
@@ -800,13 +800,14 @@ components:
       description: |
         One AgentStep in full (getInvestigationStep). text and result are null for runs saved before the
         trace recorded them.
-      required: [investigation_id, index, kind, name, text, args, result, error]
+      required: [investigation_id, index, kind, name, text, thought, args, result, error]
       properties:
         investigation_id: {type: string, format: uuid}
         index: {type: integer}
-        kind: {type: string, enum: [llm, tool]}
+        kind: {type: string, enum: [request, llm, tool], description: "request: what the agent was asked (first); llm: a model call; tool: a tool call"}
         name: {type: string}
         text: {type: [string, "null"], description: "llm: what the model wrote besides its tool calls"}
+        thought: {type: [string, "null"], description: "llm: a summary of the model's thinking"}
         args: {type: [object, "null"], additionalProperties: true, description: "tool: the arguments the model gave"}
         result: {description: "tool: what the tool returned to the model, any JSON"}
         error: {type: [string, "null"]}

@@ -299,30 +299,60 @@ label { display: inline-flex; flex-direction: column; gap: 3px; font-size: var(-
 .steps-total::before { content: "▸"; color: var(--ink-3); margin-right: 10px; }
 .steps-box[open] .steps-total::before { content: "▾"; }
 .steps-total:hover { background: var(--panel-2); }
-.steps-scroll { max-height: 440px; overflow-y: auto; margin-top: 12px; padding-right: 8px; }
-.steps { list-style: none; margin: 0; padding: 0; position: relative; }
-.steps::before { content: ""; position: absolute; left: 15px; top: 8px; bottom: 8px; width: 2px; background: var(--rule); }
-.steps li { display: grid; grid-template-columns: 32px minmax(0, 1fr) auto; gap: 14px; padding: 8px 0; position: relative; }
+/* the step list on the left, the selected step's detail on the right, both the same fixed height so the pane does
+   not jump as the selection moves; each side has exactly one scrollbar. Stacked on narrow screens. */
+.steps-split {
+  display: grid; grid-template-columns: minmax(280px, 2fr) minmax(0, 3fr); gap: 16px; margin-top: 12px;
+  height: min(560px, 70vh);
+}
+.steps-scroll, .step-pane { height: 100%; min-height: 0; overflow-y: auto; }
+.steps-scroll { padding: 2px 6px 2px 2px; }
+.step-pane { border: 1px solid var(--rule); border-radius: var(--radius); background: var(--panel); padding: 14px 16px; }
+.step-pane-title { margin: 0 0 4px; font-size: var(--step-0); }
+@media (max-width: 900px) {
+  .steps-split { grid-template-columns: minmax(0, 1fr); height: auto; }
+  .steps-scroll, .step-pane { height: auto; max-height: 60vh; }
+}
+
+/* thin scrollbars on the scrolling boxes: standard properties (Firefox, Chrome, Edge), webkit rules for Safari */
+.steps-scroll, .step-pane, .table-scroll, pre { scrollbar-width: thin; scrollbar-color: var(--rule-2) transparent; }
+:is(.steps-scroll, .step-pane, .table-scroll, pre)::-webkit-scrollbar { width: 6px; height: 6px; }
+:is(.steps-scroll, .step-pane, .table-scroll, pre)::-webkit-scrollbar-track { background: transparent; }
+:is(.steps-scroll, .step-pane, .table-scroll, pre)::-webkit-scrollbar-thumb { background: var(--rule-2); border-radius: 999px; }
+
+.steps { list-style: none; margin: 0; padding: 0; position: relative; display: flex; flex-direction: column; gap: 4px; }
+.steps::before { content: ""; position: absolute; left: 19px; top: 12px; bottom: 12px; width: 2px; background: var(--rule); }
+.steps li { display: grid; grid-template-columns: 28px minmax(0, 1fr); gap: 12px; padding: 10px 10px 10px 6px;
+  position: relative; align-items: start; }
 .steps .dot {
-  width: 32px; height: 32px; border-radius: 50%; background: var(--paper); border: 2px solid var(--rule-2);
-  display: grid; place-items: center; font-size: 12px; color: var(--ink-2); position: relative; z-index: 1;
+  width: 28px; height: 28px; border-radius: 50%; background: var(--paper); border: 2px solid var(--rule-2);
+  display: grid; place-items: center; font-size: 11px; color: var(--ink-2); position: relative; z-index: 1;
 }
 .steps .dot[data-kind="llm"] { border-color: color-mix(in srgb, var(--act) 60%, transparent); color: var(--act); }
-.steps .dot[data-kind="tool"] { font-size: 20px; line-height: 1; color: var(--ink); }
-.steps p { margin: 2px 0 0; color: var(--ink-2); max-width: 90ch; overflow-wrap: anywhere; }
-.steps .meta { color: var(--ink-3); font: 12px var(--mono); white-space: nowrap; text-align: right; }
-/* a step's details: loaded on first open; long tool output scrolls inside its own box */
-.step-detail { margin-top: 4px; }
-.step-detail > summary { cursor: pointer; color: var(--ink-3); font-size: var(--step--1); width: max-content; }
-.step-detail > summary:hover { color: var(--ink-2); }
+.steps .dot[data-kind="tool"] { font-size: 17px; line-height: 1; color: var(--ink); }
+.steps .dot[data-kind="request"] { border-style: dashed; color: var(--ink-2); }
+.steps:focus-visible { outline: 2px solid var(--act); outline-offset: 2px; border-radius: var(--radius); }
+.steps li[role="option"] { cursor: pointer; border-radius: var(--radius); }
+.steps li[role="option"]:hover { background: var(--panel-2); }
+/* the selection is the background alone; hover keeps it */
+.steps li[aria-selected="true"], .steps li[aria-selected="true"]:hover {
+  background: color-mix(in srgb, var(--act) 14%, transparent);
+}
+/* a row: the name with time and tokens on the right, then one muted line of summary (all of it is in the pane) */
+.step-head { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+.step-head strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.steps .meta { margin-left: auto; color: var(--ink-3); font: 11.5px var(--mono); white-space: nowrap; }
+.steps p { margin: 3px 0 0; color: var(--ink-2); font-size: var(--step--1); overflow-wrap: anywhere; }
+.steps li[role="option"] p { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* the selected step's detail: the pane is the only scroll, so its text blocks grow to full length */
 .step-detail-body { margin-top: 6px; }
-.step-detail-body h4 { margin: 10px 0 4px; font-size: var(--step--1); color: var(--ink-3); text-transform: uppercase;
+.step-detail-body h4 { margin: 12px 0 4px; font-size: var(--step--1); color: var(--ink-3); text-transform: uppercase;
   letter-spacing: 0.04em; }
 .step-detail-body pre {
-  margin: 0; padding: 8px 10px; max-height: 280px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere;
-  background: var(--panel); border: 1px solid var(--rule); border-radius: var(--radius); color: var(--ink-2);
+  margin: 0; padding: 8px 10px; white-space: pre-wrap; overflow-wrap: anywhere;
+  background: var(--paper); border: 1px solid var(--rule); border-radius: var(--radius); color: var(--ink-2);
 }
-@media (max-width: 700px) { .steps li { grid-template-columns: 32px minmax(0, 1fr); } .steps .meta { grid-column: 2; text-align: left; } }
 
 /* case data tabs, full width */
 .tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--rule); margin-bottom: var(--gap); flex-wrap: wrap; }

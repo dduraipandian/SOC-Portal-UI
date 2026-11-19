@@ -636,8 +636,11 @@ export interface components {
         };
         AgentStep: {
             index: number;
-            /** @enum {string} */
-            kind: "llm" | "tool";
+            /**
+             * @description request: what the agent was asked (first); llm: a model call; tool: a tool call
+             * @enum {string}
+             */
+            kind: "request" | "llm" | "tool";
             name: string;
             /** Format: date-time */
             started_at: string;
@@ -660,11 +663,16 @@ export interface components {
             /** Format: uuid */
             investigation_id: string;
             index: number;
-            /** @enum {string} */
-            kind: "llm" | "tool";
+            /**
+             * @description request: what the agent was asked (first); llm: a model call; tool: a tool call
+             * @enum {string}
+             */
+            kind: "request" | "llm" | "tool";
             name: string;
             /** @description llm: what the model wrote besides its tool calls */
             text: string | null;
+            /** @description llm: a summary of the model's thinking */
+            thought: string | null;
             /** @description tool: the arguments the model gave */
             args: {
                 [key: string]: unknown;
