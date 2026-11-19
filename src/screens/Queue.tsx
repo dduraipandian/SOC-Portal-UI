@@ -6,6 +6,7 @@ import { Age } from "../components/Age";
 import { ErrorState } from "../components/ErrorState";
 import { Severity } from "../components/Severity";
 import { StatusBadge } from "../components/StatusBadge";
+import { needsAttention, SeverityStrip } from "./queue/SeverityStrip";
 
 type Item = Schemas["QueueItem"];
 const STATUSES = ["open", "closed", "merged"] as const;
@@ -36,7 +37,8 @@ export function Queue() {
 
   return (
     <section>
-      <h1>Queue</h1>
+      <div className="page-head"><h1>Queue</h1></div>
+      <SeverityStrip items={rows} />
       <div className="filters">
         <label>
           Status
@@ -82,7 +84,7 @@ export function Queue() {
             </thead>
             <tbody>
               {rows.map((c) => (
-                <tr key={c.case_id} data-dim={c.status !== "open"} onClick={() => navigate(`/cases/${c.case_id}`)}
+                <tr key={c.case_id} data-sev={c.severity} data-dim={c.status !== "open"} onClick={() => navigate(`/cases/${c.case_id}`)}
                     style={{ cursor: "pointer" }}>
                   <td><Link to={`/cases/${c.case_id}`} onClick={(e) => e.stopPropagation()}>#{c.case_id}</Link></td>
                   <td><Severity level={c.severity} /></td>
@@ -103,7 +105,10 @@ export function Queue() {
                     </span>
                   </td>
                   <td className="num">{c.alert_count}</td>
-                  <td><StatusBadge status={c.agent_status} /></td>
+                  <td>
+                    <StatusBadge status={c.agent_status} />
+                    {needsAttention(c) && <> <StatusBadge status="warn" label="needs attention" /></>}
+                  </td>
                   <td><Age at={c.opened_at} /></td>
                   <td><Age at={c.updated_at} /></td>
                 </tr>
