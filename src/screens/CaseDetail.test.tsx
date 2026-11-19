@@ -197,6 +197,88 @@ test("agent steps are a timeline list with the totals first", async () => {
   expect(before(total, items[0])).toBe(true);
 });
 
+// ----- investigation cards: the latest run and earlier ones, newest first -----
+type Run = NonNullable<typeof INVESTIGATIONS_41.latest>;
+const run = (n: number, over: Partial<Run> = {}): Run => ({
+  ...INVESTIGATIONS_41.latest!,
+  investigation_id: `aaaaaaaa-0000-0000-0000-0000000000${String(n).padStart(2, "0")}`,
+  evidence_hash: String(n).padStart(2, "0").repeat(32),
+  completed_at: `2026-11-07T09:${String(60 - n).padStart(2, "0")}:00Z`,          // older as n grows
+  ...over,
+});
+const withRuns = (history: Run[], latest: Run | null = INVESTIGATIONS_41.latest!) =>
+  server.use(http.get(api("/investigations/41"), () => HttpResponse.json({ ...INVESTIGATIONS_41, latest, history })));
+const cards = () => within(screen.getByRole("list", { name: "Investigations" })).getAllByRole("button");
+const OLDER = run(1, {
+  verdict: "benign", rationale: "Routine admin work.",
+  evidence: [{ ...INVESTIGATIONS_41.latest!.evidence[0], tool: "older.tool", result_excerpt: "older excerpt" }],
+  steps: [{ index: 0, kind: "tool", name: "older_step", started_at: "2026-11-07T09:00:00Z", duration_ms: 500,
+            tokens_in: 0, tokens_out: 0, summary: "An older run." }],
+});
+
+test("investigations are cards with verdict, time and hash, the latest on the left", async () => {
+  withRuns([run(1, { verdict: "benign" }), run(2, { verdict: "inconclusive" })]);
+  renderAt("/cases/41");
+  await screen.findByRole("list", { name: "Investigations" });
+  const [latest, second, third] = cards();
+  for (const text of ["malicious", "Latest", "eeeeeeeeeeee", "2026-11-07 10:00 UTC"]) expect(latest).toHaveTextContent(text);
+  for (const text of ["benign", "010101010101", "2026-11-07 09:59 UTC"]) expect(second).toHaveTextContent(text);
+  for (const text of ["inconclusive", "020202020202", "2026-11-07 09:58 UTC"]) expect(third).toHaveTextContent(text);
+  expect(second).not.toHaveTextContent("Latest");
+});
+
+test("only the latest 10 investigations are shown", async () => {
+  withRuns(Array.from({ length: 12 }, (_, i) => run(i + 1)));
+  renderAt("/cases/41");
+  await screen.findByRole("list", { name: "Investigations" });
+  expect(cards()).toHaveLength(10);                         // the latest run plus the 9 before it
+  expect(cards()[9]).toHaveTextContent("090909090909");
+});
+
+test("the old Earlier investigations list is gone", async () => {
+  withRuns([run(1)]);
+  renderAt("/cases/41");
+  await screen.findByRole("list", { name: "Investigations" });
+  expect(screen.queryByText(/earlier investigations/i)).toBeNull();
+});
+
+test("the cards sit above the evidence and the agent steps, and the latest card is selected first", async () => {
+  withRuns([run(1)]);
+  renderAt("/cases/41");
+  const list = await screen.findByRole("list", { name: "Investigations" });
+  expect(before(list, screen.getByRole("heading", { name: "Evidence" }))).toBe(true);
+  expect(before(list, screen.getByRole("region", { name: "Agent steps" }))).toBe(true);
+  expect(cards()[0]).toHaveAttribute("aria-pressed", "true");
+  expect(cards()[1]).toHaveAttribute("aria-pressed", "false");
+});
+
+test("selecting a card loads that investigation's evidence and agent steps; the summary stays on the latest", async () => {
+  withRuns([OLDER]);
+  renderAt("/cases/41");
+  await screen.findByRole("list", { name: "Investigations" });
+  await userEvent.click(cards()[1]);
+  expect(cards()[1]).toHaveAttribute("aria-pressed", "true");
+  expect(cards()[0]).toHaveAttribute("aria-pressed", "false");
+  const inv = screen.getByRole("region", { name: "Investigation" });
+  const steps = within(inv).getByRole("region", { name: "Agent steps" });
+  expect(within(steps).getByText("An older run.")).toBeVisible();          // opened for you, not left collapsed
+  expect(inv).toHaveTextContent("older excerpt");
+  expect(inv).toHaveTextContent(/showing an earlier investigation/i);
+  expect(inv).not.toHaveTextContent("edr.process_tree");                   // nothing left over from the latest run
+  const summary = screen.getByRole("region", { name: "Summary" });
+  expect(summary).toHaveTextContent("82% confidence");                     // the case verdict is still the latest's
+  await userEvent.click(cards()[0]);
+  expect(within(screen.getByRole("region", { name: "Investigation" })).getByText("edr.process_tree", { selector: "td" }))
+    .toBeInTheDocument();
+});
+
+test("with no completed investigation there are no cards", async () => {
+  withRuns([], null);
+  renderAt("/cases/41");
+  await screen.findAllByText(/no completed investigation yet/i);
+  expect(screen.queryByRole("list", { name: "Investigations" })).toBeNull();
+});
+
 test("merged case shows the banner and disables the verdict form", async () => {
   renderAt("/cases/52");
   expect(await screen.findByText(/this case was merged into/i)).toBeInTheDocument();

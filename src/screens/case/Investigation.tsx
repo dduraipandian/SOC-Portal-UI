@@ -1,3 +1,4 @@
+import { useState } from "react";
 import type { Schemas } from "../../api/client";
 import { useInvestigations, useStartInvestigation } from "../../api/hooks";
 import { refusalText } from "../../api/problems";
@@ -9,7 +10,11 @@ import { AgentSteps } from "./AgentSteps";
 
 type View = Schemas["InvestigationView"];
 
-function Snapshot({ inv }: { inv: View }) {
+/** The most investigations shown as cards: the latest run and the ones before it. */
+export const MAX_RUNS = 10;
+
+/** One investigation's evidence and its agent steps. `open` expands the steps (used when an analyst picked the run). */
+function Snapshot({ inv, open }: { inv: View; open: boolean }) {
   return (
     <>
       <dl className="kv">
@@ -32,8 +37,29 @@ function Snapshot({ inv }: { inv: View }) {
           </tbody>
         </table>
       </div>
-      <AgentSteps steps={inv.steps} />
+      <AgentSteps steps={inv.steps} defaultOpen={open} />
     </>
+  );
+}
+
+/** The investigations of the case as small cards, newest on the left; the first one gave the case its verdict. */
+function RunCards({ runs, selectedId, onSelect }: { runs: View[]; selectedId: string; onSelect: (id: string) => void }) {
+  return (
+    <ul className="run-cards" aria-label="Investigations">
+      {runs.map((r, i) => (
+        <li key={r.investigation_id}>
+          <button type="button" className="run-card" aria-pressed={r.investigation_id === selectedId}
+                  data-verdict={r.verdict} onClick={() => onSelect(r.investigation_id)}>
+            <span className="run-top">
+              <strong className="run-verdict">{r.verdict.replace(/_/g, " ")}</strong>
+              {i === 0 && <span className="run-latest">Latest</span>}
+            </span>
+            <time dateTime={r.completed_at}>{formatUtc(r.completed_at)}</time>
+            <span className="hash" title={r.evidence_hash}>{r.evidence_hash.slice(0, 12)}</span>
+          </button>
+        </li>
+      ))}
+    </ul>
   );
 }
 
@@ -66,6 +92,11 @@ function StartButton({ caseId, status }: { caseId: number; status: Schemas["Agen
 
 export function Investigation({ caseId }: { caseId: number }) {
   const q = useInvestigations(caseId);
+  const [picked, setPicked] = useState<string | null>(null);
+  const latest = q.data?.latest ?? null;
+  const runs = latest ? [latest, ...(q.data?.history ?? [])].slice(0, MAX_RUNS) : [];
+  // a picked run that has dropped out of the list (or none picked yet) means the latest
+  const selected = runs.find((r) => r.investigation_id === picked) ?? runs[0];
   return (
     <Section title="Investigation">
       {q.error && <ErrorState error={q.error} onRetry={() => q.refetch()} lastUpdated={q.data ? q.dataUpdatedAt : undefined} />}
@@ -73,17 +104,20 @@ export function Investigation({ caseId }: { caseId: number }) {
         <>
           <p>Agent: <StatusBadge status={q.data.agent_status} /> <StartButton caseId={caseId} status={q.data.agent_status} /></p>
           {q.data.last_failure && <Failure failure={q.data.last_failure} />}
-          {q.data.latest ? <Snapshot inv={q.data.latest} /> : <p className="muted">No completed investigation yet.</p>}
-          {q.data.history.length > 0 && (
-            <details>
-              <summary>Earlier investigations ({q.data.history.length})</summary>
-              {q.data.history.map((h) => (
-                <div key={h.investigation_id} className="panel">
-                  {h.verdict} for v{h.case_version}, {formatUtc(h.completed_at)}
-                  <div className="hash muted">{h.evidence_hash}</div>
-                </div>
-              ))}
-            </details>
+          {selected ? (
+            <>
+              <RunCards runs={runs} selectedId={selected.investigation_id} onSelect={setPicked} />
+              {selected !== runs[0] && (
+                <p className="banner">
+                  Showing an earlier investigation: {selected.verdict.replace(/_/g, " ")} for v{selected.case_version},{" "}
+                  {formatUtc(selected.completed_at)}. The case summary above is from the latest one.
+                </p>
+              )}
+              {/* keyed so each pick starts fresh, with its steps opened when the analyst chose it */}
+              <Snapshot key={selected.investigation_id} inv={selected} open={picked !== null} />
+            </>
+          ) : (
+            <p className="muted">No completed investigation yet.</p>
           )}
         </>
       )}

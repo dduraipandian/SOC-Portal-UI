@@ -266,6 +266,29 @@ label { display: inline-flex; flex-direction: column; gap: 3px; font-size: var(-
 .decide h3 { margin-top: 0; }
 .stack { display: flex; flex-direction: column; gap: var(--gap); }
 
+/* investigation history: small cards in one scrolling row, the latest on the left */
+.run-cards { list-style: none; margin: 4px 0 16px; padding: 0 0 8px; display: flex; gap: 10px; overflow-x: auto; }
+.run-card {
+  display: flex; flex-direction: column; gap: 4px; align-items: flex-start; text-align: left; width: 176px; flex: none;
+  padding: 10px 12px; font: inherit; color: var(--ink); background: var(--panel); cursor: pointer;
+  border: 1px solid var(--rule); border-top: 3px solid var(--ink-3); border-radius: var(--radius);
+}
+.run-card[data-verdict="malicious"] { border-top-color: var(--sev-5); }
+.run-card[data-verdict="benign"], .run-card[data-verdict="false_positive"] { border-top-color: var(--act); }
+.run-card[data-verdict="inconclusive"] { border-top-color: var(--warn); }
+.run-card:hover { background: var(--panel-2); }
+.run-card[aria-pressed="true"] { background: var(--panel-2); border-color: var(--act); border-top-color: var(--act); }
+.run-card[aria-pressed="true"][data-verdict="malicious"] { border-top-color: var(--sev-5); }
+.run-card[aria-pressed="true"][data-verdict="inconclusive"] { border-top-color: var(--warn); }
+.run-top { display: flex; align-items: center; gap: 8px; }
+.run-verdict { text-transform: capitalize; }
+.run-latest {
+  font-size: 11px; padding: 0 7px; border-radius: 999px; color: var(--act);
+  border: 1px solid color-mix(in srgb, var(--act) 50%, transparent);
+}
+.run-card time { font-size: var(--step--1); color: var(--ink-2); }
+.run-card .hash { font-size: 11.5px; color: var(--ink-3); }
+
 /* investigation: evidence, then the agent's steps as a timeline */
 .steps-box { margin-bottom: 22px; }
 .steps-total {
