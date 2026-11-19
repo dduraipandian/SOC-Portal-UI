@@ -226,6 +226,30 @@ label { display: inline-flex; flex-direction: column; gap: 3px; font-size: var(-
 .timeline li[data-kind="alert"]::before { border-color: var(--sev-4); }
 .timeline li[data-suppressed="true"] { color: var(--ink-2); }
 .explained { font-size: var(--step--1); color: var(--ink-2); font-style: italic; }
+.section-head { display: flex; align-items: baseline; }
+.section-head h2 { margin-right: 0; }
+
+/* alerts inside a case: one line each, severity on the left edge, detail on demand */
+.alert-list { display: flex; flex-direction: column; gap: 8px; }
+.alert-row {
+  background: var(--panel); border: 1px solid var(--rule); border-left: 4px solid var(--sev-1);
+  border-radius: var(--radius-sm); box-shadow: var(--shadow);
+}
+.alert-row[data-level="2"] { border-left-color: var(--sev-2); }
+.alert-row[data-level="3"] { border-left-color: var(--sev-3); }
+.alert-row[data-level="4"] { border-left-color: var(--sev-4); }
+.alert-row[data-level="5"] { border-left-color: var(--sev-5); }
+.alert-row summary {
+  list-style: none; cursor: pointer; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; padding: 10px 14px;
+}
+.alert-row summary::-webkit-details-marker { display: none; }
+.alert-row summary::before { content: "▸"; color: var(--ink-2); font-size: var(--step--1); width: 10px; }
+.alert-row[open] summary::before { content: "▾"; }
+.alert-row summary:hover { background: var(--panel-2); }
+.alert-row[data-suppressed="true"] { opacity: 0.8; }
+.alert-row time { margin-left: auto; font-size: var(--step--1); white-space: nowrap; }
+.alert-body { padding: 4px 14px 14px 36px; border-top: 1px solid var(--rule); display: flex; flex-direction: column; gap: 8px; }
+.alert-body .kv { margin-top: 8px; }
 
 /* the proposal and its fingerprint */
 .proposal { background: var(--panel); border: 1px solid var(--rule); border-radius: var(--radius); padding: 16px; box-shadow: var(--shadow); }

@@ -10,11 +10,11 @@ const section = (name: string) => screen.getByRole("region", { name });
 
 test("S6 partial match: the suppressed alert is marked with its rule and the rule trace shows 'partial'", async () => {
   renderAt("/cases/57");
-  const timeline = await screen.findByRole("region", { name: "Timeline" });
-  const shadow = within(timeline).getByText("awk -F: {print $1, $5} /etc/shadow").closest("li")!;
+  const alerts = await screen.findByRole("region", { name: "Alerts" });
+  const shadow = within(alerts).getByText("awk -F: {print $1, $5} /etc/shadow").closest("details")!;
   expect(shadow).toHaveAttribute("data-suppressed", "true");
   expect(shadow).toHaveTextContent("Explained by rule #7 v2");
-  const other = within(timeline).getByText("curl -s http://203.0.113.50:8443/beacon").closest("li")!;
+  const other = within(alerts).getByText("curl -s http://203.0.113.50:8443/beacon").closest("details")!;
   expect(other).not.toHaveAttribute("data-suppressed", "true");
   const trace = section("Rule trace");
   expect(trace).toHaveTextContent("build-01 nightly password-expiry audit");
@@ -60,8 +60,59 @@ test("alert command and evidence excerpt render as text", async () => {   // RF3
   const { container } = renderAt("/cases/41");
   const inv = await screen.findByRole("region", { name: "Investigation" });
   await within(inv).findAllByText(XSS);
-  expect(within(section("Timeline")).getAllByText(XSS).length).toBeGreaterThan(0);
+  expect(within(section("Alerts")).getAllByText(XSS).length).toBeGreaterThan(0);
   expect(container.querySelector("img")).toBeNull();
+});
+
+test("alerts are listed oldest first with severity, category, source, technique and a count", async () => {
+  renderAt("/cases/57");
+  const alerts = await screen.findByRole("region", { name: "Alerts" });
+  expect(alerts.querySelector(".count")).toHaveTextContent("2");
+  const rows = alerts.querySelectorAll("details.alert-row");
+  expect(rows).toHaveLength(2);
+  expect(rows[0]).toHaveTextContent("sensitive file read");
+  expect(rows[0]).toHaveTextContent("sentrix-edr");
+  expect(rows[0]).toHaveTextContent("T1003.008");
+  expect(rows[0].querySelector("summary .severity")).not.toBeNull();
+});
+
+test("an alert row expands to its command, parent and ancestors", async () => {
+  renderAt("/cases/57");
+  const alerts = await screen.findByRole("region", { name: "Alerts" });
+  const cmd = within(alerts).getByText("awk -F: {print $1, $5} /etc/shadow");
+  expect(cmd).not.toBeVisible();
+  await userEvent.click(cmd.closest("details")!.querySelector("summary")!);
+  expect(cmd).toBeVisible();
+  expect(within(alerts).getByText("/bin/bash /opt/maint/nightly.sh")).toBeVisible();
+  expect(within(alerts).getByText(/\/usr\/sbin\/cron -f/)).toBeVisible();
+});
+
+test("a case with no alerts says so", async () => {
+  server.use(http.get(api("/cases/41"), () => HttpResponse.json(caseDetail({ alerts: [] }))));
+  renderAt("/cases/41");
+  const alerts = await screen.findByRole("region", { name: "Alerts" });
+  expect(alerts).toHaveTextContent("No alerts in this case.");
+  expect(alerts.querySelector(".count")).toHaveTextContent("0");
+});
+
+test("an alert without process, file or network detail expands to 'No further detail.'", async () => {
+  server.use(http.get(api("/cases/41"), () => HttpResponse.json(caseDetail({
+    alerts: [alert({ process: null, file: null, network: null })],
+  }))));
+  renderAt("/cases/41");
+  const alerts = await screen.findByRole("region", { name: "Alerts" });
+  expect(within(alerts).getByText("No further detail.")).toBeInTheDocument();
+});
+
+test("closed and merged events stay in the Timeline, not in Alerts", async () => {
+  server.use(http.get(api("/cases/41"), () => HttpResponse.json(caseDetail({
+    events: [{ id: 9, version: 3, kind: "closed", at: "2026-11-07T11:00:00Z",
+               data: { verdict: "benign", by: "analyst", closed_by: "sam" } }],
+  }))));
+  renderAt("/cases/41");
+  const timeline = await screen.findByRole("region", { name: "Timeline" });
+  expect(timeline).toHaveTextContent("Closed as benign by sam");
+  expect(within(section("Alerts")).queryByText(/Closed as/)).toBeNull();
 });
 
 test("verdict sends the rendered expected_version and the X-Analyst header", async () => {

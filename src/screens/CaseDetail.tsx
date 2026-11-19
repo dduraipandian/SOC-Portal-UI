@@ -7,6 +7,7 @@ import { ProposalCard } from "../components/ProposalCard";
 import { Severity } from "../components/Severity";
 import { StatusBadge } from "../components/StatusBadge";
 import { Age } from "../components/Age";
+import { Alerts } from "./case/Alerts";
 import { Enrichment } from "./case/Enrichment";
 import { Investigation } from "./case/Investigation";
 import { RelatedCases } from "./case/RelatedCases";
@@ -55,6 +56,7 @@ export function CaseDetail() {
           )}
           <div className="case-layout">
             <div>
+              <Alerts c={c} />
               <Timeline c={c} />
               <Enrichment c={c} />
               <RuleTrace c={c} />
