@@ -10,6 +10,7 @@ export function AgentSteps({ steps, title = "Agent steps" }: { steps: Schemas["A
   const count = `${steps.length} ${steps.length === 1 ? "step" : "steps"} (${llm} model, ${steps.length - llm} tool)`;
   return (
     <Section title={title}>
+      <div className="table-scroll">
       <table className="grid">
         <thead>
           <tr><th>Step</th><th>Kind</th><th>What it did</th><th className="num">Time</th><th className="num">Tokens</th></tr>
@@ -32,6 +33,7 @@ export function AgentSteps({ steps, title = "Agent steps" }: { steps: Schemas["A
           ))}
         </tbody>
       </table>
+      </div>
     </Section>
   );
 }

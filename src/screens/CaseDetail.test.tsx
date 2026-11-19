@@ -58,13 +58,50 @@ test("summary flags a verdict written for an older version of the case", async (
   await within(summary).findByText("Based on v3; the case is now v5.");
 });
 
-test("the case page reads summary, investigation, then alerts", async () => {
+const before = (a: Element, b: Element) => !!(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
+
+test("the top band holds the case header and the summary, ahead of the investigation", async () => {
   renderAt("/cases/41");
   const summary = await screen.findByRole("region", { name: "Summary" });
+  const heading = screen.getByRole("heading", { level: 1 });
   const inv = screen.getByRole("region", { name: "Investigation" });
-  const alerts = screen.getByRole("region", { name: "Alerts" });
-  expect(summary.compareDocumentPosition(inv) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-  expect(inv.compareDocumentPosition(alerts) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  expect(summary.closest(".case-top")).not.toBeNull();
+  expect(heading.closest(".case-top")).toBe(summary.closest(".case-top"));
+  expect(before(summary, inv)).toBe(true);
+});
+
+test("the right column stacks case data tabs, then proposed actions, then the verdict form", async () => {
+  renderAt("/cases/41");
+  const tabs = await screen.findByRole("tablist", { name: "Case data" });
+  const side = screen.getByRole("complementary", { name: "Case sidebar" });
+  const proposals = screen.getByRole("region", { name: "Proposals" });
+  const verdict = screen.getByRole("form", { name: "Analyst verdict" });
+  for (const el of [tabs, proposals, verdict]) expect(side).toContainElement(el);
+  expect(before(tabs, proposals)).toBe(true);
+  expect(before(proposals, verdict)).toBe(true);
+  // reading material stays on the left, outside the sidebar
+  expect(side).not.toContainElement(screen.getByRole("region", { name: "Investigation" }));
+  expect(side).not.toContainElement(screen.getByRole("region", { name: "Rule trace" }));
+});
+
+test("case data opens on Alerts; Enrichment is one click away and swaps the panel", async () => {
+  renderAt("/cases/41");
+  const alertsTab = await screen.findByRole("tab", { name: "Alerts" });
+  const enrichTab = screen.getByRole("tab", { name: "Enrichment" });
+  expect(alertsTab).toHaveAttribute("aria-selected", "true");
+  expect(enrichTab).toHaveAttribute("aria-selected", "false");
+  expect(screen.getByRole("region", { name: "Alerts" })).toBeInTheDocument();
+  expect(screen.queryByRole("region", { name: "Enrichment" })).toBeNull();
+  await userEvent.click(enrichTab);
+  expect(enrichTab).toHaveAttribute("aria-selected", "true");
+  expect(screen.getByRole("region", { name: "Enrichment" })).toBeInTheDocument();
+  expect(screen.queryByRole("region", { name: "Alerts" })).toBeNull();
+});
+
+test("the tab panel scrolls inside a fixed height so proposed actions stay in reach", async () => {
+  renderAt("/cases/41");
+  const panel = await screen.findByRole("tabpanel", { name: "Alerts" });
+  expect(panel).toHaveClass("tab-body");
 });
 
 test("investigation shows evidence excerpt, evidence_hash and agent steps with token total", async () => {
@@ -79,6 +116,12 @@ test("investigation shows evidence excerpt, evidence_hash and agent steps with t
   expect(steps).toHaveTextContent("6,030");                            // tokens in + out
   expect(steps).toHaveTextContent("4.37 s");
   expect(steps).toHaveTextContent("3 steps (2 model, 1 tool)");
+});
+
+test("the agent steps table scrolls inside its own container instead of widening the page", async () => {
+  renderAt("/cases/41");
+  const steps = await screen.findByRole("region", { name: "Agent steps" });
+  expect(within(steps).getByRole("table").closest(".table-scroll")).not.toBeNull();
 });
 
 test("merged case shows the banner and disables the verdict form", async () => {
@@ -199,6 +242,7 @@ test("unknown host shows 'unknown' enrichment", async () => {
     entities: { hosts: ["web-srv-01", "mystery-07"], users: [], ips: [] },
   }))));
   renderAt("/cases/41");
+  await userEvent.click(await screen.findByRole("tab", { name: "Enrichment" }));
   const enrichment = await screen.findByRole("region", { name: "Enrichment" });
   const row = within(enrichment).getByText("mystery-07").closest("tr")!;
   expect(row).toHaveTextContent("unknown");
@@ -208,6 +252,7 @@ test("unknown host shows 'unknown' enrichment", async () => {
 test("enrichment shows the destinations alerts connected to, with their reputation", async () => {
   // S1: the C2 address is an alert destination, not a case entity, but the enricher looked it up.
   renderAt("/cases/41");
+  await userEvent.click(await screen.findByRole("tab", { name: "Enrichment" }));
   const enrichment = await screen.findByRole("region", { name: "Enrichment" });
   const row = within(enrichment).getByText("203.0.113.50").closest("tr")!;
   expect(row).toHaveTextContent("malicious");
