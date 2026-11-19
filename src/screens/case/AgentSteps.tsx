@@ -3,6 +3,7 @@ import { Section } from "../../components/Section";
 
 const n = (x: number) => x.toLocaleString("en-US");
 
+/** What the agent did, in order, as a vertical timeline: model steps marked "AI", tool calls marked with a gear. */
 export function AgentSteps({ steps, title = "Agent steps" }: { steps: Schemas["AgentStep"][]; title?: string }) {
   const ms = steps.reduce((s, x) => s + x.duration_ms, 0);
   const tokens = steps.reduce((s, x) => s + x.tokens_in + x.tokens_out, 0);
@@ -10,30 +11,25 @@ export function AgentSteps({ steps, title = "Agent steps" }: { steps: Schemas["A
   const count = `${steps.length} ${steps.length === 1 ? "step" : "steps"} (${llm} model, ${steps.length - llm} tool)`;
   return (
     <Section title={title}>
-      <div className="table-scroll">
-      <table className="grid">
-        <thead>
-          <tr><th>Step</th><th>Kind</th><th>What it did</th><th className="num">Time</th><th className="num">Tokens</th></tr>
-        </thead>
-        <tbody>
-          {/* totals first: a long run's steps can push them far down the page */}
-          <tr>
-            <td colSpan={3}><strong>Total</strong>: {count}</td>
-            <td className="num"><strong>{(ms / 1000).toFixed(2)} s</strong></td>
-            <td className="num"><strong>{n(tokens)}</strong></td>
-          </tr>
-          {steps.map((s) => (
-            <tr key={s.index}>
-              <td>{s.name}</td>
-              <td>{s.kind === "llm" ? "model" : "tool"}</td>
-              <td>{s.summary}</td>
-              <td className="num">{(s.duration_ms / 1000).toFixed(2)} s</td>
-              <td className="num">{n(s.tokens_in + s.tokens_out)}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-      </div>
+      {/* totals first: a long run's steps can push them far down the page */}
+      <p className="steps-total">
+        <strong>Total</strong>: {count} · {(ms / 1000).toFixed(2)} s · {n(tokens)} tokens
+      </p>
+      <ol className="steps">
+        {steps.map((s) => (
+          <li key={s.index}>
+            <span className="dot" data-kind={s.kind} aria-hidden="true">{s.kind === "llm" ? "AI" : "⚙"}</span>
+            <div>
+              <strong>{s.name}</strong>
+              <span className="muted"> · {s.kind === "llm" ? "model" : "tool"}</span>
+              <p>{s.summary}</p>
+            </div>
+            <span className="meta">
+              {(s.duration_ms / 1000).toFixed(2)} s{s.tokens_in + s.tokens_out > 0 && ` · ${n(s.tokens_in + s.tokens_out)} tok`}
+            </span>
+          </li>
+        ))}
+      </ol>
     </Section>
   );
 }

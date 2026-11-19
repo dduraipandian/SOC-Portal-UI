@@ -18,17 +18,20 @@ function eventText(e: CaseEvent): string {
 export function Timeline({ c }: { c: Case }) {
   const events = c.events.filter((e) => e.kind === "closed" || e.kind === "merged")
     .sort((a, b) => a.at.localeCompare(b.at));
-  if (events.length === 0) return null;
   return (
     <Section title="Timeline">
-      <ol className="timeline">
-        {events.map((e) => (
-          <li key={e.id} data-kind="event">
-            <div className="muted">{formatUtc(e.at)}</div>
-            {eventText(e)}
-          </li>
-        ))}
-      </ol>
+      {events.length === 0 ? (
+        <p className="muted">No closed or merged events yet.</p>
+      ) : (
+        <ol className="timeline">
+          {events.map((e) => (
+            <li key={e.id} data-kind="event">
+              <div className="muted">{formatUtc(e.at)}</div>
+              {eventText(e)}
+            </li>
+          ))}
+        </ol>
+      )}
     </Section>
   );
 }

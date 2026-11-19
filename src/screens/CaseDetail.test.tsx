@@ -7,6 +7,8 @@ import { renderAt } from "../test/render";
 import { server } from "../test/server";
 
 const section = (name: string) => screen.getByRole("region", { name });
+const openTab = async (name: string) => userEvent.click(await screen.findByRole("tab", { name }));
+const before = (a: Element, b: Element) => !!(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
 
 test("S6 partial match: the suppressed alert is marked with its rule and the rule trace shows 'partial'", async () => {
   renderAt("/cases/57");
@@ -16,6 +18,7 @@ test("S6 partial match: the suppressed alert is marked with its rule and the rul
   expect(shadow).toHaveTextContent("Explained by rule #7 v2");
   const other = within(alerts).getByText("curl -s http://203.0.113.50:8443/beacon").closest("details")!;
   expect(other).not.toHaveAttribute("data-suppressed", "true");
+  await openTab("Rule trace");
   const trace = section("Rule trace");
   expect(trace).toHaveTextContent("build-01 nightly password-expiry audit");
   expect(trace).toHaveTextContent("partial");
@@ -58,30 +61,82 @@ test("summary flags a verdict written for an older version of the case", async (
   await within(summary).findByText("Based on v3; the case is now v5.");
 });
 
-const before = (a: Element, b: Element) => !!(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
-
-test("the top band holds the case header and the summary, ahead of the investigation", async () => {
+test("a case bar shows the case, severity, status and entities", async () => {
   renderAt("/cases/41");
-  const summary = await screen.findByRole("region", { name: "Summary" });
-  const heading = screen.getByRole("heading", { level: 1 });
-  const inv = screen.getByRole("region", { name: "Investigation" });
-  expect(summary.closest(".case-top")).not.toBeNull();
-  expect(heading.closest(".case-top")).toBe(summary.closest(".case-top"));
-  expect(before(summary, inv)).toBe(true);
+  const heading = await screen.findByRole("heading", { level: 1 });
+  const bar = heading.closest(".case-bar")!;
+  expect(bar).not.toBeNull();
+  expect(bar).toHaveTextContent("Case #41");
+  expect(bar).toHaveTextContent("Critical");
+  expect(bar).toHaveTextContent("open");
+  expect(bar).toHaveTextContent("web-srv-01");
+  expect(within(bar as HTMLElement).getByRole("link", { name: "Queue" })).toHaveAttribute("href", "/");
 });
 
-test("the right column stacks case data tabs, then proposed actions, then the verdict form", async () => {
+test("the case bar jumps to the decision when an action is proposed", async () => {
   renderAt("/cases/41");
-  const tabs = await screen.findByRole("tablist", { name: "Case data" });
-  const side = screen.getByRole("complementary", { name: "Case sidebar" });
-  const proposals = screen.getByRole("region", { name: "Proposals" });
-  const verdict = screen.getByRole("form", { name: "Analyst verdict" });
-  for (const el of [tabs, proposals, verdict]) expect(side).toContainElement(el);
-  expect(before(tabs, proposals)).toBe(true);
-  expect(before(proposals, verdict)).toBe(true);
-  // reading material stays on the left, outside the sidebar
-  expect(side).not.toContainElement(screen.getByRole("region", { name: "Investigation" }));
-  expect(side).not.toContainElement(screen.getByRole("region", { name: "Rule trace" }));
+  const jump = await screen.findByRole("link", { name: /1 proposed action/ });
+  expect(jump).toHaveAttribute("href", "#decision");
+});
+
+test("the case bar has no jump link when nothing is proposed", async () => {
+  server.use(http.get(api("/proposals"), () => HttpResponse.json([])));
+  renderAt("/cases/41");
+  await screen.findByText("The agent has not proposed an action.");
+  expect(screen.queryByRole("link", { name: /proposed action/ })).toBeNull();
+});
+
+test("the page reads summary, decision, investigation, then case data, each full width", async () => {
+  const { container } = renderAt("/cases/41");
+  const summary = await screen.findByRole("region", { name: "Summary" });
+  const decision = screen.getByRole("region", { name: "Decision" });
+  const inv = screen.getByRole("region", { name: "Investigation" });
+  const tabs = screen.getByRole("tablist", { name: "Case data" });
+  expect(before(summary, decision)).toBe(true);
+  expect(before(decision, inv)).toBe(true);
+  expect(before(inv, tabs)).toBe(true);
+  expect(container.querySelector(".case-page aside")).toBeNull();     // no side column any more
+});
+
+test("the decision band holds proposed actions beside the analyst verdict form", async () => {
+  renderAt("/cases/41");
+  const decision = await screen.findByRole("region", { name: "Decision" });
+  expect(decision).toContainElement(screen.getByRole("region", { name: "Proposals" }));
+  expect(decision).toContainElement(screen.getByRole("form", { name: "Analyst verdict" }));
+  expect(decision).toHaveAttribute("id", "decision");
+});
+
+test("the summary shows confidence as a meter, and the agent, ages and alert count as facts", async () => {
+  renderAt("/cases/41");
+  const summary = await screen.findByRole("region", { name: "Summary" });
+  const meter = await within(summary).findByRole("meter");
+  expect(meter).toHaveAttribute("aria-valuenow", "82");
+  for (const label of ["Agent", "Opened", "Updated", "Alerts"]) expect(summary).toHaveTextContent(label);
+});
+
+test("case data has five tabs in order and opens on Alerts", async () => {
+  renderAt("/cases/41");
+  const names = ["Alerts", "Enrichment", "Rule trace", "Related cases", "Timeline"];
+  const tabs = await Promise.all(names.map((n) => screen.findByRole("tab", { name: n })));
+  tabs.slice(1).forEach((t, i) => expect(before(tabs[i], t)).toBe(true));
+  expect(tabs[0]).toHaveAttribute("aria-selected", "true");
+});
+
+test("Rule trace, Related cases and Timeline say so when there is nothing to show", async () => {
+  server.use(http.get(api("/cases/41"), () => HttpResponse.json(caseDetail({ related_case_ids: [], events: [] }))));
+  renderAt("/cases/41");
+  await openTab("Rule trace");
+  expect(section("Rule trace")).toHaveTextContent("No rule matched this case.");
+  await openTab("Related cases");
+  expect(section("Related cases")).toHaveTextContent("No related cases.");
+  await openTab("Timeline");
+  expect(section("Timeline")).toHaveTextContent("No closed or merged events yet.");
+});
+
+test("Related cases lists the cases that share an entity", async () => {
+  renderAt("/cases/41");
+  await openTab("Related cases");
+  expect(within(section("Related cases")).getByRole("link", { name: "#12" })).toHaveAttribute("href", "/cases/12");
 });
 
 test("case data opens on Alerts; Enrichment is one click away and swaps the panel", async () => {
@@ -98,30 +153,26 @@ test("case data opens on Alerts; Enrichment is one click away and swaps the pane
   expect(screen.queryByRole("region", { name: "Alerts" })).toBeNull();
 });
 
-test("the tab panel scrolls inside a fixed height so proposed actions stay in reach", async () => {
-  renderAt("/cases/41");
-  const panel = await screen.findByRole("tabpanel", { name: "Alerts" });
-  expect(panel).toHaveClass("tab-body");
-});
-
-test("investigation shows evidence excerpt, evidence_hash and agent steps with token total", async () => {
+test("investigation shows the evidence first, then the agent steps", async () => {
   renderAt("/cases/41");
   const inv = await screen.findByRole("region", { name: "Investigation" });
   await within(inv).findByText("e".repeat(64));
   expect(inv).toHaveTextContent("edr.process_tree");
-  const steps = section("Agent steps");
-  const rows = within(steps).getAllByRole("row");
-  expect(rows).toHaveLength(1 + 1 + 3);                                // header, total, 3 steps
-  expect(rows[1]).toHaveTextContent("Total");                          // totals sit at the top
-  expect(steps).toHaveTextContent("6,030");                            // tokens in + out
-  expect(steps).toHaveTextContent("4.37 s");
-  expect(steps).toHaveTextContent("3 steps (2 model, 1 tool)");
+  const evidence = within(inv).getByRole("heading", { name: "Evidence" });
+  expect(before(evidence, within(inv).getByRole("region", { name: "Agent steps" }))).toBe(true);
 });
 
-test("the agent steps table scrolls inside its own container instead of widening the page", async () => {
+test("agent steps are a timeline list with the totals first", async () => {
   renderAt("/cases/41");
   const steps = await screen.findByRole("region", { name: "Agent steps" });
-  expect(within(steps).getByRole("table").closest(".table-scroll")).not.toBeNull();
+  const items = within(steps).getAllByRole("listitem");
+  expect(items).toHaveLength(3);                                       // plan, tool, verdict
+  expect(items[1]).toHaveTextContent("edr.process_tree");
+  const total = steps.querySelector(".steps-total")!;
+  expect(total).toHaveTextContent("3 steps (2 model, 1 tool)");
+  expect(total).toHaveTextContent("6,030");                            // tokens in + out
+  expect(total).toHaveTextContent("4.37 s");
+  expect(before(total, items[0])).toBe(true);
 });
 
 test("merged case shows the banner and disables the verdict form", async () => {
@@ -196,9 +247,10 @@ test("closed and merged events stay in the Timeline, not in Alerts", async () =>
                data: { verdict: "benign", by: "analyst", closed_by: "sam" } }],
   }))));
   renderAt("/cases/41");
-  const timeline = await screen.findByRole("region", { name: "Timeline" });
-  expect(timeline).toHaveTextContent("Closed as benign by sam");
-  expect(within(section("Alerts")).queryByText(/Closed as/)).toBeNull();
+  const alerts = await screen.findByRole("region", { name: "Alerts" });
+  expect(within(alerts).queryByText(/Closed as/)).toBeNull();
+  await openTab("Timeline");
+  expect(section("Timeline")).toHaveTextContent("Closed as benign by sam");
 });
 
 test("verdict sends the rendered expected_version and the X-Analyst header", async () => {

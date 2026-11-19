@@ -177,6 +177,6 @@ test("/proposals groups by status with proposed first", async () => {
 
 test("case detail shows the case's proposals as cards", async () => {
   renderAt("/cases/41");
-  const decisions = await screen.findByRole("complementary", { name: "Case sidebar" });
+  const decisions = await screen.findByRole("region", { name: "Decision" });
   expect(await within(decisions).findByRole("article", { name: /contain host/i })).toBeInTheDocument();
 });
