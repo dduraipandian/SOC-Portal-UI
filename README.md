@@ -1,6 +1,6 @@
 # Portal UI
 
-React analyst portal: case queue, case detail, proposals, rules, pipeline health.
+React analyst portal: case queue, case detail (summary, investigation, alerts), proposals, rules, pipeline health. Dark by default, light when the OS prefers it.
 
 ```bash
 docker compose up -d --build     # http://localhost:8120

@@ -45,7 +45,7 @@ export function Rules() {
   const [tab, setTab] = useState<Tab>("Suggestions");
   return (
     <section>
-      <h1>Rules</h1>
+      <div className="page-head"><h1>Rules</h1></div>
       <div role="tablist" className="tabs">
         {TABS.map((t) => (
           <button key={t} role="tab" type="button" aria-selected={tab === t} onClick={() => setTab(t)}>{t}</button>
