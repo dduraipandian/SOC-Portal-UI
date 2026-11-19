@@ -311,6 +311,17 @@ label { display: inline-flex; flex-direction: column; gap: 3px; font-size: var(-
 .steps .dot[data-kind="tool"] { font-size: 20px; line-height: 1; color: var(--ink); }
 .steps p { margin: 2px 0 0; color: var(--ink-2); max-width: 90ch; overflow-wrap: anywhere; }
 .steps .meta { color: var(--ink-3); font: 12px var(--mono); white-space: nowrap; text-align: right; }
+/* a step's details: loaded on first open; long tool output scrolls inside its own box */
+.step-detail { margin-top: 4px; }
+.step-detail > summary { cursor: pointer; color: var(--ink-3); font-size: var(--step--1); width: max-content; }
+.step-detail > summary:hover { color: var(--ink-2); }
+.step-detail-body { margin-top: 6px; }
+.step-detail-body h4 { margin: 10px 0 4px; font-size: var(--step--1); color: var(--ink-3); text-transform: uppercase;
+  letter-spacing: 0.04em; }
+.step-detail-body pre {
+  margin: 0; padding: 8px 10px; max-height: 280px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere;
+  background: var(--panel); border: 1px solid var(--rule); border-radius: var(--radius); color: var(--ink-2);
+}
 @media (max-width: 700px) { .steps li { grid-template-columns: 32px minmax(0, 1fr); } .steps .meta { grid-column: 2; text-align: left; } }
 
 /* case data tabs, full width */

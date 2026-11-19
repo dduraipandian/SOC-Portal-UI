@@ -33,6 +33,19 @@ export function useInvestigations(caseId: number) {
   });
 }
 
+/** One agent step in full (the model's message, the tool's input and output), fetched only when an analyst opens
+ *  the step. It is stored with the run and never changes, so it is cached for good and not polled. */
+export function useInvestigationStep(investigationId: string, index: number) {
+  return useQuery({
+    queryKey: ["investigation-step", investigationId, index],
+    queryFn: () =>
+      unwrap(api.GET("/investigations/{investigation_id}/steps/{index}", {
+        params: { path: { investigation_id: investigationId, index } },
+      })),
+    staleTime: Infinity,
+  });
+}
+
 export type ProposalFilter = { caseId?: number; status?: Schemas["ProposalStatus"] };
 
 export function useProposals({ caseId, status }: ProposalFilter = {}) {

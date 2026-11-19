@@ -44,6 +44,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/investigations/{investigation_id}/steps/{index}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * One agent step in full, for when an analyst opens it: what the model wrote and what the tool
+         *     returned, exactly as stored when the run happened (not fetched again from the vendor).
+         */
+        get: operations["getInvestigationStep"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/proposals": {
         parameters: {
             query?: never;
@@ -625,6 +645,33 @@ export interface components {
             tokens_in: number;
             tokens_out: number;
             summary: string;
+            /** @description tool: the arguments the model gave */
+            args?: {
+                [key: string]: unknown;
+            } | null;
+            /** @description why the model call or tool call failed */
+            error?: string | null;
+        };
+        /**
+         * @description One AgentStep in full (getInvestigationStep). text and result are null for runs saved before the
+         *     trace recorded them.
+         */
+        StepDetail: {
+            /** Format: uuid */
+            investigation_id: string;
+            index: number;
+            /** @enum {string} */
+            kind: "llm" | "tool";
+            name: string;
+            /** @description llm: what the model wrote besides its tool calls */
+            text: string | null;
+            /** @description tool: the arguments the model gave */
+            args: {
+                [key: string]: unknown;
+            } | null;
+            /** @description tool: what the tool returned to the model, any JSON */
+            result: unknown;
+            error: string | null;
         };
         /** @description contracts.agent.InvestigationSnapshot plus the agent's step trace */
         InvestigationView: {
@@ -817,6 +864,33 @@ export interface operations {
             };
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
+            502: components["responses"]["Unavailable"];
+        };
+    };
+    getInvestigationStep: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                investigation_id: string;
+                /** @description AgentStep.index */
+                index: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The step */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StepDetail"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            404: components["responses"]["NotFound"];
             502: components["responses"]["Unavailable"];
         };
     };

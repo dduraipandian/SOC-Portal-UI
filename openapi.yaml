@@ -70,6 +70,26 @@ paths:
         "409": {$ref: "#/components/responses/Conflict"}
         "502": {$ref: "#/components/responses/Unavailable"}
 
+  /investigations/{investigation_id}/steps/{index}:
+    get:
+      operationId: getInvestigationStep
+      tags: [agent]
+      summary: |
+        One agent step in full, for when an analyst opens it: what the model wrote and what the tool
+        returned, exactly as stored when the run happened (not fetched again from the vendor).
+      parameters:
+        - {name: investigation_id, in: path, required: true, schema: {type: string, format: uuid}}
+        - {name: index, in: path, required: true, description: "AgentStep.index", schema: {type: integer, minimum: 0}}
+      responses:
+        "200":
+          description: The step
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/StepDetail"}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "502": {$ref: "#/components/responses/Unavailable"}
+
   /proposals:
     get:
       operationId: listProposals
@@ -773,6 +793,23 @@ components:
         tokens_in: {type: integer}
         tokens_out: {type: integer}
         summary: {type: string}
+        args: {type: [object, "null"], additionalProperties: true, description: "tool: the arguments the model gave"}
+        error: {type: [string, "null"], description: "why the model call or tool call failed"}
+    StepDetail:
+      type: object
+      description: |
+        One AgentStep in full (getInvestigationStep). text and result are null for runs saved before the
+        trace recorded them.
+      required: [investigation_id, index, kind, name, text, args, result, error]
+      properties:
+        investigation_id: {type: string, format: uuid}
+        index: {type: integer}
+        kind: {type: string, enum: [llm, tool]}
+        name: {type: string}
+        text: {type: [string, "null"], description: "llm: what the model wrote besides its tool calls"}
+        args: {type: [object, "null"], additionalProperties: true, description: "tool: the arguments the model gave"}
+        result: {description: "tool: what the tool returned to the model, any JSON"}
+        error: {type: [string, "null"]}
     InvestigationView:
       type: object
       description: contracts.agent.InvestigationSnapshot plus the agent's step trace

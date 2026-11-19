@@ -1,6 +1,8 @@
 // Default MSW handlers: a healthy portal backend serving the fixtures. Tests override per case.
 import { http, HttpResponse } from "msw";
-import { CASE_52, CASE_57, caseDetail, HEALTH, INVESTIGATIONS_41, proposal, QUEUE, rule, SIMULATION } from "./fixtures";
+import {
+  CASE_52, CASE_57, caseDetail, HEALTH, INVESTIGATIONS_41, proposal, QUEUE, rule, SIMULATION, STEPS_41,
+} from "./fixtures";
 
 export const api = (path: string) => `*/api${path}`;
 
@@ -23,6 +25,10 @@ export const handlers = [
     Number(params.id) === 41
       ? HttpResponse.json(INVESTIGATIONS_41)
       : HttpResponse.json({ case_id: Number(params.id), agent_status: "pending", latest: null, history: [] })),
+  http.get(api("/investigations/:id/steps/:index"), ({ params }) => {
+    const step = params.id === INVESTIGATIONS_41.latest?.investigation_id ? STEPS_41[Number(params.index)] : undefined;
+    return step ? HttpResponse.json(step) : HttpResponse.json({ error: "not_found" }, { status: 404 });
+  }),
   http.get(api("/proposals"), ({ request }) => {
     const caseId = new URL(request.url).searchParams.get("case_id");
     return HttpResponse.json(caseId === null || caseId === "41" ? [proposal()] : []);

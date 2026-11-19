@@ -100,6 +100,17 @@ export const INVESTIGATIONS_41: S["Investigations"] = {
   },
 };
 
+/** The full steps of INVESTIGATIONS_41's latest run, by index, as GET /investigations/{id}/steps/{index} returns them. */
+export const STEPS_41: Record<number, S["StepDetail"]> = Object.fromEntries(
+  [
+    { index: 0, kind: "llm", name: "plan", text: null, args: null, result: null, error: null },
+    { index: 1, kind: "tool", name: "edr.process_tree", text: null, args: { host: "web-srv-01", pid: 4312 },
+      result: { found: true, process: { cmdline: "curl -s http://203.0.113.50:8443/beacon" }, note: XSS }, error: null },
+    { index: 2, kind: "llm", name: "verdict", text: "Beaconing confirmed; submitting.", args: null, result: null,
+      error: null },
+  ].map((s) => [s.index, { investigation_id: "aaaaaaaa-0000-0000-0000-000000000041", ...s } as S["StepDetail"]]),
+);
+
 export function proposal(over: Partial<Proposal> = {}): Proposal {
   return {
     schema_version: "1", proposal_id: "bbbbbbbb-0000-0000-0000-000000000041", case_id: 41, case_version: 3,

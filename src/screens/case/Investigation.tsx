@@ -41,7 +41,8 @@ function Snapshot({ inv, stepsOpen, onStepsOpenChange }: {
           </tbody>
         </table>
       </div>
-      <AgentSteps steps={inv.steps} open={stepsOpen} onOpenChange={onStepsOpenChange} />
+      <AgentSteps investigationId={inv.investigation_id} steps={inv.steps} open={stepsOpen}
+                  onOpenChange={onStepsOpenChange} />
     </>
   );
 }
@@ -75,7 +76,9 @@ function Failure({ failure }: { failure: Schemas["InvestigationFailure"] }) {
       <p className="muted">
         For v{failure.case_version}, {formatUtc(failure.completed_at)}, after {(failure.duration_ms / 1000).toFixed(1)} s
       </p>
-      {failure.steps.length > 0 && <AgentSteps steps={failure.steps} title="Steps before it failed" />}
+      {failure.steps.length > 0 && (
+        <AgentSteps investigationId={failure.investigation_id} steps={failure.steps} title="Steps before it failed" />
+      )}
     </div>
   );
 }
