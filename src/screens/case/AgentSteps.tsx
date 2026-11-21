@@ -1,7 +1,8 @@
-import { useEffect, useId, useState, type KeyboardEvent } from "react";
+import { useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
 import type { Schemas } from "../../api/client";
 import { useAgentStep, type StepSource } from "../../api/hooks";
 import { refusalText } from "../../api/problems";
+import { Icon } from "../../components/Icon";
 import { Section } from "../../components/Section";
 
 type Step = Schemas["AgentStep"];
@@ -69,6 +70,26 @@ export function AgentSteps({ source, steps, title = "Agent steps", open, onOpenC
   const [selected, setSelected] = useState(0);                    // a position in `steps`
   const current = steps[Math.min(selected, steps.length - 1)];
   const optionId = (i: number) => `${ids}-step-${i}`;
+  const [expanded, setExpanded] = useState(false);               // the steps fill the browser window
+  const box = useRef<HTMLDetailsElement>(null);
+  const expandButton = useRef<HTMLButtonElement>(null);
+
+  function toggleExpanded() {
+    if (!expanded && box.current && !box.current.open) box.current.open = true;  // fires onToggle, so it also loads
+    setExpanded(!expanded);
+  }
+
+  useEffect(() => {
+    if (!expanded) return;
+    // Esc returns the steps to their place; the page behind stays still while they fill the window
+    const onEsc = (e: globalThis.KeyboardEvent) => {
+      if (e.key === "Escape") { e.preventDefault(); setExpanded(false); expandButton.current?.focus(); }
+    };
+    const overflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    document.addEventListener("keydown", onEsc);
+    return () => { document.removeEventListener("keydown", onEsc); document.body.style.overflow = overflow; };
+  }, [expanded]);
 
   useEffect(() => {
     // keep the selection visible when the keyboard moves it past the edge of the scrolling list
@@ -89,10 +110,18 @@ export function AgentSteps({ source, steps, title = "Agent steps", open, onOpenC
   const count = `${work.length} ${work.length === 1 ? "step" : "steps"} (${llm} model, ${work.length - llm} tool)`;
   return (
     <Section title={title}>
-      <details className="steps-box" open={open}
+      <div className="steps-frame" data-expanded={expanded || undefined}
+           role={expanded ? "dialog" : undefined} aria-label={expanded ? title : undefined}>
+      <button ref={expandButton} type="button" className="steps-expand" onClick={toggleExpanded}
+              aria-label={expanded ? "Exit full screen" : "Full screen"} aria-pressed={expanded}
+              title={expanded ? "Exit full screen (Esc)" : "Full screen"}>
+        <Icon name={expanded ? "collapse" : "expand"} />
+      </button>
+      <details ref={box} className="steps-box" open={open}
                onToggle={(e) => { setShown(e.currentTarget.open); onOpenChange?.(e.currentTarget.open); }}>
         <summary className="steps-total">
           <strong>Total</strong>: {count} · {(ms / 1000).toFixed(2)} s · {n(tokens)} tokens
+          {expanded && <span className="muted"> · Esc to exit</span>}
         </summary>
         <div className="steps-split">
           <div className="steps-scroll">
@@ -123,6 +152,7 @@ export function AgentSteps({ source, steps, title = "Agent steps", open, onOpenC
           </section>
         </div>
       </details>
+      </div>
     </Section>
   );
 }

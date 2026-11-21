@@ -234,6 +234,32 @@ test("the request is selected first and only the shown step is fetched, once the
   server.events.removeAllListeners();
 });
 
+test("the full-screen button fills the window with the steps, opening them, and Esc puts them back", async () => {
+  renderAt("/cases/41");
+  const steps = await screen.findByRole("region", { name: "Agent steps" });
+  const box = steps.querySelector("details.steps-box") as HTMLDetailsElement;
+  expect(box.open).toBe(false);
+
+  await userEvent.click(within(steps).getByRole("button", { name: "Full screen" }));
+  const frame = screen.getByRole("dialog", { name: "Agent steps" });
+  expect(frame).toHaveAttribute("data-expanded");
+  expect(box.open).toBe(true);                                         // a closed box opens as it expands
+  expect(within(frame).getByRole("listbox", { name: "Steps" })).toBeVisible();
+  expect(document.body.style.overflow).toBe("hidden");                 // the page behind stays still
+
+  await userEvent.keyboard("{Escape}");
+  expect(screen.queryByRole("dialog")).toBeNull();
+  expect(steps.querySelector(".steps-frame")).not.toHaveAttribute("data-expanded");
+  expect(document.body.style.overflow).toBe("");
+  const button = within(steps).getByRole("button", { name: "Full screen" });
+  expect(button).toHaveFocus();                                        // back where the analyst was
+  expect(box.open).toBe(true);                                         // the steps stay open in place
+
+  await userEvent.click(button);                                       // the same button also exits
+  await userEvent.click(within(steps).getByRole("button", { name: "Exit full screen" }));
+  expect(screen.queryByRole("dialog")).toBeNull();
+});
+
 test("Up and Down move the selection, and the detail follows it", async () => {
   renderAt("/cases/41");
   const { list, pane } = await openSteps();

@@ -301,6 +301,27 @@ label { display: inline-flex; flex-direction: column; gap: 3px; font-size: var(-
 .steps-total::before { content: "▸"; color: var(--ink-3); margin-right: 10px; }
 .steps-box[open] .steps-total::before { content: "▾"; }
 .steps-total:hover { background: var(--panel-2); }
+/* full screen: the button sits in the Total bar's right corner; expanded, the steps fill the browser window and the
+   split takes all the height left under the Total bar (Esc or the button puts them back) */
+.steps-frame { position: relative; }
+.steps-frame .steps-total { padding-right: 52px; }
+.steps-expand {
+  position: absolute; top: 5px; right: 6px; z-index: 2; display: grid; place-items: center; width: 34px; height: 32px;
+  padding: 0; border: 1px solid transparent; border-radius: var(--radius); background: transparent; color: var(--ink-2);
+  cursor: pointer;
+}
+.steps-expand:hover { color: var(--ink); background: var(--panel-2); border-color: var(--rule); }
+.steps-expand:focus-visible { outline: 2px solid var(--act); outline-offset: 1px; }
+.steps-frame[data-expanded] {
+  position: fixed; inset: 0; z-index: 50; background: var(--paper); padding: 16px 20px; overflow: hidden;
+}
+.steps-frame[data-expanded] .steps-expand { top: 21px; right: 26px; }
+.steps-frame[data-expanded] .steps-box { margin: 0; }
+.steps-frame[data-expanded] .steps-split { height: calc(100vh - 32px - 56px); }
+@media (max-width: 900px) {
+  .steps-frame[data-expanded] { overflow-y: auto; }
+  .steps-frame[data-expanded] .steps-split { height: auto; }
+}
 /* the step list on the left, the selected step's detail on the right, both the same fixed height so the pane does
    not jump as the selection moves; each side has exactly one scrollbar. Stacked on narrow screens. */
 .steps-split {
