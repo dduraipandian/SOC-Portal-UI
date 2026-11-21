@@ -5,7 +5,7 @@ import { ANALYST, api, unwrap, type Schemas } from "./client";
 const header = { "X-Analyst": ANALYST };
 
 // Every query polls, so a screen recovers from an outage on its own (the error state says it will).
-export const POLL = { queue: 5000, case: 5000, investigations: 5000, proposals: 2000, rules: 5000, health: 5000 } as const;
+export const POLL = { queue: 5000, case: 5000, investigations: 5000, proposals: 2000, rules: 5000, health: 5000, evals: 5000 } as const;
 
 export type QueueParams = { status?: Schemas["CaseStatus"]; severity?: number; entity?: string; limit?: number };
 
@@ -33,16 +33,63 @@ export function useInvestigations(caseId: number) {
   });
 }
 
+/** Where a run's steps live: a production investigation or an eval run. Both answer with the same StepDetail. */
+export type StepSource = { kind: "investigation" | "eval-run"; id: string };
+
 /** One agent step in full (the model's message, the tool's input and output), fetched only when an analyst opens
  *  the step. It is stored with the run and never changes, so it is cached for good and not polled. */
-export function useInvestigationStep(investigationId: string, index: number) {
+export function useAgentStep(source: StepSource, index: number) {
   return useQuery({
-    queryKey: ["investigation-step", investigationId, index],
+    queryKey: ["agent-step", source.kind, source.id, index],
     queryFn: () =>
-      unwrap(api.GET("/investigations/{investigation_id}/steps/{index}", {
-        params: { path: { investigation_id: investigationId, index } },
-      })),
+      source.kind === "investigation"
+        ? unwrap(api.GET("/investigations/{investigation_id}/steps/{index}", {
+            params: { path: { investigation_id: source.id, index } },
+          }))
+        : unwrap(api.GET("/evals/runs/{run_id}/steps/{index}", { params: { path: { run_id: source.id, index } } })),
     staleTime: Infinity,
+  });
+}
+
+// --- evals: batches are started from the CLI; the page polls while the selected batch is not finished ----------
+
+export function useEvalBatches() {
+  return useQuery({
+    queryKey: ["eval-batches"],
+    queryFn: () => unwrap(api.GET("/evals/batches")),
+    refetchInterval: (q) => (q.state.data?.every((b) => b.finished_at) ? false : POLL.evals),
+  });
+}
+
+export function useEvalBatch(batchId: string | undefined) {
+  return useQuery({
+    queryKey: ["eval-batch", batchId],
+    queryFn: () => unwrap(api.GET("/evals/batches/{batch_id}", { params: { path: { batch_id: batchId! } } })),
+    enabled: !!batchId,
+    refetchInterval: (q) => (q.state.data?.batch.finished_at ? false : POLL.evals),
+  });
+}
+
+export function useEvalRun(runId: string | undefined) {
+  return useQuery({
+    queryKey: ["eval-run", runId],
+    queryFn: () => unwrap(api.GET("/evals/runs/{run_id}", { params: { path: { run_id: runId! } } })),
+    enabled: !!runId,
+  });
+}
+
+/** The human rationale review; saving again replaces it. */
+export function useSaveReview(runId: string) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (v: { correct: boolean; note?: string }) =>
+      unwrap(api.PUT("/evals/runs/{run_id}/review", {
+        params: { path: { run_id: runId }, header },
+        body: { correct: v.correct, note: v.note || null },
+      })),
+    // the answer is the reviewed run: shown at once; the batch's counts are fetched again
+    onSuccess: (run) => client.setQueryData(["eval-run", runId], run),
+    onSettled: () => client.invalidateQueries({ queryKey: ["eval-batch"] }),
   });
 }
 

@@ -1,6 +1,6 @@
 import { useEffect, useId, useState, type KeyboardEvent } from "react";
 import type { Schemas } from "../../api/client";
-import { useInvestigationStep } from "../../api/hooks";
+import { useAgentStep, type StepSource } from "../../api/hooks";
 import { refusalText } from "../../api/problems";
 import { Section } from "../../components/Section";
 
@@ -21,8 +21,8 @@ function StepLabel({ step }: { step: Step }) {
 /** The selected step in full, fetched when it is shown: the question the agent was given, the model's thinking
  *  summary and message, or the tool's input and output, as stored when the run happened. Everything here is shown as
  *  text and never interpreted: tool output is the vendor's data, and the request quotes alert fields. */
-function StepDetail({ investigationId, step }: { investigationId: string; step: Step }) {
-  const q = useInvestigationStep(investigationId, step.index);
+function StepDetail({ source, step }: { source: StepSource; step: Step }) {
+  const q = useAgentStep(source, step.index);
   if (q.isPending) return <p className="muted">Loading…</p>;
   if (q.error) return <p role="alert" className="refusal">{refusalText(q.error)}</p>;
   const d = q.data;
@@ -57,9 +57,9 @@ const meta = (s: Step) =>
 /** What the agent did, in order: the request it was given, then its model and tool steps. The list is on the left and
  *  the selected step's detail on the right; Up/Down (and Home/End) move the selection. Collapsed by default (a long run
  *  would push everything below it far down the page); the totals stay visible in the summary line. */
-export function AgentSteps({ investigationId, steps, title = "Agent steps", open, onOpenChange }: {
-  /** The run the steps belong to: the selected step's detail is fetched from it. */
-  investigationId: string;
+export function AgentSteps({ source, steps, title = "Agent steps", open, onOpenChange }: {
+  /** The run the steps belong to (an investigation or an eval run): the selected step's detail is fetched from it. */
+  source: StepSource;
   steps: Step[]; title?: string;
   /** Controlled when given (the parent keeps it across investigations); otherwise the box manages itself, closed. */
   open?: boolean; onOpenChange?: (open: boolean) => void;
@@ -117,7 +117,7 @@ export function AgentSteps({ investigationId, steps, title = "Agent steps", open
             {current && (
               <>
                 <h3 className="step-pane-title step-head"><StepLabel step={current} /></h3>
-                {shown && <StepDetail key={current.index} investigationId={investigationId} step={current} />}
+                {shown && <StepDetail key={current.index} source={source} step={current} />}
               </>
             )}
           </section>

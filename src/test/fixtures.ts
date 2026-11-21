@@ -160,3 +160,117 @@ export const HEALTH: S["Health"] = {
   dlq: { messages: 0 },
   last_pull: { "sentrix-edr": "2026-11-07T10:04:50Z", "keyline-idp": "2026-11-07T10:04:45Z", "nimbus-cloud": null },
 };
+
+// --- evals ----------------------------------------------------------------------------------------------------
+// The baseline batch is still running (14 of 36 runs); the smoke batch is done.
+
+export const BATCH_BASELINE = "01a1fc00-0000-7000-8000-000000000002";
+export const BATCH_SMOKE = "01a1fba9-0000-7000-8000-000000000001";
+export const RUN_PROD_3 = "01a1fc10-0000-7000-8000-000000000031"; // production, case 3: incorrect (process)
+export const RUN_GEMINI_3 = "01a1fc10-0000-7000-8000-000000000032"; // gemini, case 3: waiting for review
+export const RUN_QWEN_1 = "01a1fc10-0000-7000-8000-000000000011"; // qwen2b, case 1: incorrect (verdict)
+export const RUN_PROD_1 = "01a1fc10-0000-7000-8000-000000000001"; // production, case 1: correct (not the default)
+
+export const EVAL_BATCHES: S["EvalBatchSummary"][] = [
+  { batch_id: BATCH_BASELINE, note: "baseline before prompt fix", started_at: "2026-11-21T01:30:00Z", finished_at: null,
+    last_run_at: "2026-11-21T02:10:00Z", variants: ["production", "gemini-flash-lite", "qwen2b", "gemma-e2b"],
+    case_ids: [1, 2, 3], k: 3, runs_done: 14, runs_total: 36 },
+  { batch_id: BATCH_SMOKE, note: "smoke", started_at: "2026-11-21T01:12:00Z", finished_at: "2026-11-21T01:14:00Z",
+    last_run_at: "2026-11-21T01:14:00Z", variants: ["production"], case_ids: [3], k: 1, runs_done: 1, runs_total: 1 },
+];
+
+const row = (over: Partial<S["EvalScoreRow"]>): S["EvalScoreRow"] => ({
+  case_id: 3, scenario_id: "S2", variant: "production", k: 1, correct: 0, pending: 0, pass_k: false, verdict: 1,
+  process: 0, grounding: 1, rationale: 0, entities_missed: [], errors: 0, infra: 0, median_ms: 69000,
+  median_tokens: 6358, ...over,
+});
+
+const runSummary = (over: Partial<S["EvalRunSummary"]>): S["EvalRunSummary"] => ({
+  run_id: RUN_PROD_3, case_id: 3, variant: "production", attempt: 1, outcome: "incorrect", verdict: "malicious",
+  failure_kind: null, duration_ms: 69000, started_at: "2026-11-21T01:40:00Z", ...over,
+});
+
+export const EVAL_BATCH_BASELINE: S["EvalBatchDetail"] = {
+  batch: EVAL_BATCHES[0],
+  cases: [
+    { case_id: 1, scenario_id: "S6", expected_verdict: "benign" },
+    { case_id: 2, scenario_id: "S6", expected_verdict: "benign" },
+    { case_id: 3, scenario_id: "S2", expected_verdict: "malicious" },
+  ],
+  variants: [
+    { name: "production", provider: "ollama", model: "bonsai-2:4b", reasoning_level: "high", prompt_file: "soc_investigation.md" },
+    { name: "gemini-flash-lite", provider: "gemini", model: "models/gemini-3.5-flash-lite", reasoning_level: "high", prompt_file: "soc_investigation.md" },
+    { name: "qwen2b", provider: "ollama", model: "qwen3.5:2b-q4_K_M", reasoning_level: "high", prompt_file: "soc_investigation.md" },
+    { name: "gemma-e2b", provider: "", model: "", reasoning_level: null, prompt_file: "" },
+  ],
+  rows: [
+    row({ case_id: 1, scenario_id: "S6", k: 2, correct: 2, pass_k: null, process: 2, grounding: 2, rationale: 2 }),
+    row({}),
+    row({ variant: "gemini-flash-lite", pending: 1, pass_k: null, process: 1 }),
+    row({ variant: "qwen2b", case_id: 1, scenario_id: "S6", verdict: 0 }),
+  ],
+  runs: [
+    runSummary({ run_id: RUN_PROD_1, case_id: 1, outcome: "correct", verdict: "benign" }),
+    runSummary({ run_id: "01a1fc10-0000-7000-8000-000000000002", case_id: 1, attempt: 2, outcome: "correct", verdict: "benign" }),
+    runSummary({}),
+    runSummary({ run_id: RUN_GEMINI_3, variant: "gemini-flash-lite", outcome: "pending_review", duration_ms: 21000 }),
+    runSummary({ run_id: RUN_QWEN_1, variant: "qwen2b", case_id: 1, verdict: "malicious", duration_ms: 88000 }),
+  ],
+  pending_reviews: 1, infra: 0, median_ms: 69000,
+};
+
+export const EVAL_BATCH_SMOKE: S["EvalBatchDetail"] = {
+  batch: EVAL_BATCHES[1], cases: [{ case_id: 3, scenario_id: "S2", expected_verdict: "malicious" }],
+  variants: [EVAL_BATCH_BASELINE.variants[0]], rows: [row({})], runs: [runSummary({ run_id: "01a1fbaa-0000-7000-8000-000000000001" })],
+  pending_reviews: 0, infra: 0, median_ms: 69000,
+};
+
+const evalSteps: S["AgentStep"][] = [
+  { index: 0, kind: "request", name: "request", started_at: "2026-11-21T01:40:00Z", duration_ms: 0, tokens_in: 0, tokens_out: 0, summary: "Case 3: 1 alert" },
+  { index: 1, kind: "tool", name: "get_process_tree", started_at: "2026-11-21T01:40:09Z", duration_ms: 24, tokens_in: 0, tokens_out: 0,
+    summary: "found", args: { pid: 472, host: "eng-ws-03" } },
+];
+
+export function evalRun(over: Partial<S["EvalRunDetail"]> = {}): S["EvalRunDetail"] {
+  return {
+    run_id: RUN_PROD_3, batch_id: BATCH_BASELINE, case_id: 3, variant: "production", attempt: 1, outcome: "incorrect",
+    reviewable: false, settings: { provider: "ollama", model: "bonsai-2:4b" }, status: "success", verdict: "malicious",
+    confidence: "medium", rationale: "arun.m ran non-interactive sudo to read /etc/shadow.", error: null,
+    evidence: [{ tool: "submit_investigation", args: { fact: "user" }, result_digest: "d".repeat(64), result_excerpt: "user: root", captured_at: "2026-11-21T01:41:09Z" }],
+    grades: [
+      { grader: "verdict", version: 1, passed: true, details: { expected: "malicious", actual: "malicious" } },
+      { grader: "process", version: 1, passed: false, details: { tree_at_alert_time: false, history_search: false, looked_before_submit: true } },
+      { grader: "grounding", version: 1, passed: true, details: { unsupported: [], missing: {} } },
+      { grader: "errors", version: 1, passed: true, details: { tool_errors: 0, rejected_submits: 0, messages: [] } },
+      { grader: "entity_mention", version: 1, passed: null, details: { missing: ["eng-ws-03"] } },
+      { grader: "cost", version: 1, passed: null, details: { model_calls: 2, tool_calls: 4, prompt_tokens: 5250, output_tokens: 1108 } },
+    ],
+    steps: evalSteps, prompt_tokens: 5250, output_tokens: 1108, duration_ms: 69000, started_at: "2026-11-21T01:40:00Z",
+    ...over,
+  };
+}
+
+export const EVAL_RUNS: Record<string, S["EvalRunDetail"]> = {
+  [RUN_PROD_3]: evalRun(),
+  [RUN_GEMINI_3]: evalRun({
+    run_id: RUN_GEMINI_3, variant: "gemini-flash-lite", outcome: "pending_review", reviewable: true,
+    grades: evalRun().grades.map((g) => (g.grader === "process" ? { ...g, passed: true, details: { tree_at_alert_time: true, history_search: true, looked_before_submit: true } } : g)),
+  }),
+  [RUN_QWEN_1]: evalRun({
+    run_id: RUN_QWEN_1, variant: "qwen2b", case_id: 1,
+    grades: evalRun().grades.map((g) => (g.grader === "verdict" ? { ...g, passed: false, details: { expected: "benign", actual: "malicious" } } : g)),
+  }),
+};
+
+EVAL_RUNS[RUN_PROD_1] = evalRun({
+  run_id: RUN_PROD_1, case_id: 1, outcome: "correct", verdict: "benign",
+  grades: evalRun().grades.map((g) =>
+    g.grader === "verdict" ? { ...g, details: { expected: "benign", actual: "benign" } }
+      : g.grader === "process" ? { ...g, passed: true, details: { tree_at_alert_time: true, history_search: true, looked_before_submit: true } }
+      : g),
+});
+
+export const EVAL_STEP: S["StepDetail"] = {
+  investigation_id: RUN_PROD_3, index: 1, kind: "tool", name: "get_process_tree", text: null, thought: null,
+  args: { pid: 472, host: "eng-ws-03" }, result: { found: true, lineage: [{ pid: 470, user: "arun.m" }] }, error: null,
+};

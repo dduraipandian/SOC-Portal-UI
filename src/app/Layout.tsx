@@ -6,6 +6,7 @@ const LINKS: { to: string; label: string; icon: IconName; end?: boolean }[] = [
   { to: "/", label: "Queue", icon: "queue", end: true },
   { to: "/proposals", label: "Proposals", icon: "proposals" },
   { to: "/rules", label: "Rules", icon: "rules" },
+  { to: "/evals", label: "Evals", icon: "evals" },
   { to: "/health", label: "Pipeline health", icon: "health" },
 ];
 
