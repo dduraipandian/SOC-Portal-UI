@@ -2,7 +2,7 @@ import { screen, waitFor, within } from "@testing-library/react";
 import { focusManager } from "@tanstack/react-query";
 import userEvent from "@testing-library/user-event";
 import { http, HttpResponse } from "msw";
-import { BATCH_BASELINE, EVAL_BATCHES, EVAL_RUNS, RUN_GEMINI_3, RUN_PROD_1, RUN_PROD_3 } from "../test/fixtures";
+import { BATCH_BASELINE, EVAL_BATCH_BASELINE, EVAL_BATCHES, EVAL_RUNS, RUN_GEMINI_3, RUN_PROD_1, RUN_PROD_3 } from "../test/fixtures";
 import { api } from "../test/handlers";
 import { renderAt } from "../test/render";
 import { server } from "../test/server";
@@ -136,4 +136,45 @@ test("a batch opens on its first variant's runs", async () => {
 
   expect(await screen.findByRole("region", { name: "Runs of production" })).toBeInTheDocument();
   expect(await screen.findByRole("list", { name: "Runs" })).toBeInTheDocument();
+});
+
+const reviewed = (note: string) => ({
+  ...EVAL_RUNS[RUN_GEMINI_3], outcome: "correct" as const,
+  grades: [...EVAL_RUNS[RUN_GEMINI_3].grades,
+           { grader: "rationale_human", version: 1, passed: true, details: { note, reviewer: "analyst" } }],
+});
+
+test("the review form shows the saved review", async () => {
+  server.use(http.get(api(`/evals/runs/${RUN_GEMINI_3}`), () => HttpResponse.json(reviewed("names arun.m; minor: ppid 0"))));
+  renderAt(`/evals/${BATCH_BASELINE}?variant=gemini-flash-lite&run=${RUN_GEMINI_3}`);
+
+  const form = await screen.findByRole("form", { name: "Review" });
+  expect(within(form).getByRole("radio", { name: "Correct" })).toBeChecked();
+  expect(within(form).getByRole("textbox", { name: "Note" })).toHaveValue("names arun.m; minor: ppid 0");
+});
+
+test("saving a review never moves the page to another run", async () => {
+  // two gemini runs waiting for review; the page opens on the first without a run in the URL
+  const SECOND = "01a1fc10-0000-7000-8000-000000000033";
+  const pending = EVAL_BATCH_BASELINE.runs.find((r) => r.run_id === RUN_GEMINI_3)!;
+  let batch = { ...EVAL_BATCH_BASELINE, runs: [pending, { ...pending, run_id: SECOND, attempt: 2 }] };
+  server.use(
+    http.get(api(`/evals/batches/${BATCH_BASELINE}`), () => HttpResponse.json(batch)),
+    http.get(api(`/evals/runs/${SECOND}`), () => HttpResponse.json({ ...EVAL_RUNS[RUN_GEMINI_3], run_id: SECOND, attempt: 2 })),
+    http.put(api(`/evals/runs/${RUN_GEMINI_3}/review`), () => {
+      batch = { ...batch, runs: batch.runs.map((r) => (r.run_id === RUN_GEMINI_3 ? { ...r, outcome: "correct" as const } : r)) };
+      return HttpResponse.json(reviewed("ok"));
+    }),
+  );
+  renderAt(`/evals/${BATCH_BASELINE}?variant=gemini-flash-lite`);
+
+  const form = await screen.findByRole("form", { name: "Review" });
+  await userEvent.click(within(form).getByRole("radio", { name: "Correct" }));
+  await userEvent.click(within(form).getByRole("button", { name: "Save review" }));
+  await within(why()).findByText(/analyst: ok/);
+
+  // the batch is fetched again with the first run now correct: the page must stay on it
+  await waitFor(() => expect(runCards()[0]).toHaveTextContent("correct"));
+  expect(runCards()[0]).toHaveAttribute("aria-pressed", "true");
+  expect(within(why()).getByText(/analyst: ok/)).toBeInTheDocument();
 });

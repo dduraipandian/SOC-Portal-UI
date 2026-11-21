@@ -2,10 +2,11 @@ import { useState } from "react";
 import { useSaveReview } from "../../api/hooks";
 import { refusalText } from "../../api/problems";
 
-/** The human rationale review: is the reasoning right, not just the verdict. Saving again replaces it. */
-export function ReviewForm({ runId, current }: { runId: string; current?: boolean }) {
+/** The human rationale review: is the reasoning right, not just the verdict. A saved review is shown in the form, so
+ *  changing it starts from what was saved; saving again replaces it. */
+export function ReviewForm({ runId, current, savedNote = "" }: { runId: string; current?: boolean; savedNote?: string }) {
   const [correct, setCorrect] = useState<boolean | undefined>(current);
-  const [note, setNote] = useState("");
+  const [note, setNote] = useState(savedNote);
   const save = useSaveReview(runId);
   return (
     <form aria-label="Review" className="review-form"

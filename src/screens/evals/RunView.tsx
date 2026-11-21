@@ -40,7 +40,10 @@ export function RunView({ runId }: { runId: string }) {
         </p>
       </Section>
 
-      {run.reviewable && <ReviewForm key={run.run_id} runId={run.run_id} current={review?.passed ?? undefined} />}
+      {run.reviewable && (
+        <ReviewForm key={run.run_id} runId={run.run_id} current={review?.passed ?? undefined}
+                    savedNote={typeof review?.details.note === "string" ? review.details.note : ""} />
+      )}
 
       <dl className="kv">
         <dt>Verdict</dt><dd>{run.verdict ?? "none"}{run.confidence ? ` (${run.confidence})` : ""}</dd>

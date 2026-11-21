@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import type { Schemas } from "../../api/client";
 import { RunView } from "./RunView";
 
@@ -23,6 +24,11 @@ export function VariantRuns({ detail, variant, caseId, runId, onCase, onRun }: {
     .filter((r) => r.variant === variant && (caseId === undefined || r.case_id === caseId))
     .sort((a, b) => a.case_id - b.case_id || a.attempt - b.attempt || a.started_at.localeCompare(b.started_at));
   const selected = runId && runs.some((r) => r.run_id === runId) ? runId : defaultRun(runs);
+  // the run chosen by default is written to the URL, so it stays selected: saving a review changes the outcomes the
+  // default is picked from, and the page must not move to another run under the reviewer
+  useEffect(() => {
+    if (!runId && selected) onRun(selected);
+  }, [runId, selected, onRun]);
   const expected = (caseId === undefined ? detail.cases.length : 1) * detail.batch.k;
   const missing = Math.max(0, expected - runs.filter((r) => r.outcome !== "infra").length);
 
