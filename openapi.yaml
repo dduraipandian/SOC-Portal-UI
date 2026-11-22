@@ -71,7 +71,7 @@ paths:
         "409": {$ref: "#/components/responses/Conflict"}
         "502": {$ref: "#/components/responses/Unavailable"}
 
-  /investigations/{investigation_id}/steps/{index}:
+  /investigations/{investigation_id}/trace/{trace_seq}:
     get:
       operationId: getInvestigationStep
       tags: [agent]
@@ -80,7 +80,7 @@ paths:
         returned, exactly as stored when the run happened (not fetched again from the vendor).
       parameters:
         - {name: investigation_id, in: path, required: true, schema: {type: string, format: uuid}}
-        - {name: index, in: path, required: true, description: "AgentStep.index", schema: {type: integer, minimum: 0}}
+        - {name: trace_seq, in: path, required: true, description: "AgentStep.trace_seq", schema: {type: integer, minimum: 0}}
       responses:
         "200":
           description: The step
@@ -438,14 +438,14 @@ paths:
         "404": {$ref: "#/components/responses/NotFound"}
         "502": {$ref: "#/components/responses/Unavailable"}
 
-  /evals/runs/{run_id}/steps/{index}:
+  /evals/runs/{run_id}/trace/{trace_seq}:
     get:
       operationId: getEvalRunStep
       tags: [evals]
       summary: One step of an eval run in full; the same shape as getInvestigationStep (`investigation_id` is the run id).
       parameters:
         - {name: run_id, in: path, required: true, schema: {type: string, format: uuid}}
-        - {name: index, in: path, required: true, description: "AgentStep.index", schema: {type: integer, minimum: 0}}
+        - {name: trace_seq, in: path, required: true, description: "AgentStep.trace_seq", schema: {type: integer, minimum: 0}}
       responses:
         "200":
           description: The step
@@ -875,18 +875,21 @@ components:
 
     EvidenceItem:
       type: object
-      required: [tool, args, result_digest, result_excerpt, captured_at]
+      description: |
+        One fact the agent cited: its value, copied from the step it cites (AgentStep.step; 0 is the case).
+        step and verified are null for evidence saved before citations.
+      required: [fact, value, step, verified]
       properties:
-        tool: {type: string}
-        args: {type: object, additionalProperties: true}
-        result_digest: {type: string, pattern: "^[0-9a-f]{64}$"}
-        result_excerpt: {type: string}
-        captured_at: {type: string, format: date-time}
+        fact: {type: string}
+        value: {type: string}
+        step: {type: [integer, "null"]}
+        verified: {type: [boolean, "null"], description: "whether the value is in the step it cites"}
     AgentStep:
       type: object
-      required: [index, kind, name, started_at, duration_ms, tokens_in, tokens_out, summary]
+      required: [trace_seq, kind, name, started_at, duration_ms, tokens_in, tokens_out, summary]
       properties:
-        index: {type: integer}
+        trace_seq: {type: integer, description: "its position in the trace: how its detail is fetched"}
+        step: {type: [integer, "null"], description: "the agent's own step number, which evidence cites; the request is 0"}
         kind: {type: string, enum: [request, llm, tool], description: "request: what the agent was asked (first); llm: a model call; tool: a tool call"}
         name: {type: string}
         started_at: {type: string, format: date-time}
@@ -901,10 +904,10 @@ components:
       description: |
         One AgentStep in full (getInvestigationStep). text and result are null for runs saved before the
         trace recorded them.
-      required: [investigation_id, index, kind, name, text, thought, args, result, error]
+      required: [investigation_id, trace_seq, kind, name, text, thought, args, result, error]
       properties:
         investigation_id: {type: string, format: uuid}
-        index: {type: integer}
+        trace_seq: {type: integer}
         kind: {type: string, enum: [request, llm, tool], description: "request: what the agent was asked (first); llm: a model call; tool: a tool call"}
         name: {type: string}
         text: {type: [string, "null"], description: "llm: what the model wrote besides its tool calls"}

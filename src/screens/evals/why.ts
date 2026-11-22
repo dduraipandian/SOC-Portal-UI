@@ -22,6 +22,12 @@ export function why(grade: Grade): string {
     }
     case "grounding": {
       if (d.reason) return String(d.reason);
+      if (grade.version >= 2) {
+        // v2+: each fact must be in the step it cites; a label is "<value> (step n)"
+        const absent = Object.entries((d.missing ?? {}) as Record<string, unknown>)
+          .map(([label, what]) => `${list(what).join(", ")} ${label.slice(label.lastIndexOf("(step"))}`);
+        return absent.length ? `not in the step it cites: ${absent.join(" · ")}` : "every fact is in the step it cites";
+      }
       const missing = Object.values((d.missing ?? {}) as Record<string, unknown>).flatMap(list);
       if (missing.length) return `not shown to the agent: ${missing.join(", ")}`;
       const unsupported = list(d.unsupported);

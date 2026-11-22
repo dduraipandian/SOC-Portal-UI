@@ -86,7 +86,7 @@ test("a review is saved with the analyst", async () => {
 test("the run view loads step details from the eval run", async () => {
   const fetched: string[] = [];
   server.events.on("request:start", ({ request }) => {
-    if (request.url.includes("/steps/")) fetched.push(new URL(request.url).pathname);
+    if (request.url.includes("/trace/")) fetched.push(new URL(request.url).pathname);
   });
   renderAt(`/evals/${BATCH_BASELINE}?variant=production&run=${RUN_PROD_3}`);
 
@@ -94,7 +94,7 @@ test("the run view loads step details from the eval run", async () => {
   await userEvent.click(steps.querySelector("summary")!);
   await userEvent.click(within(steps).getAllByRole("option")[1]);
   await within(steps).findByText(/arun\.m/);
-  expect(fetched).toContain(`/api/evals/runs/${RUN_PROD_3}/steps/1`);
+  expect(fetched).toContain(`/api/evals/runs/${RUN_PROD_3}/trace/1`);
   server.events.removeAllListeners();
 });
 
@@ -188,4 +188,20 @@ test("the batch id is shown and can be copied", async () => {
 
   expect(await navigator.clipboard.readText()).toBe(BATCH_BASELINE);
   expect(screen.getByRole("button", { name: "Copy batch id" })).toHaveTextContent("Copied");
+});
+
+test("evidence cites its step: [n] opens that step, and a value not in it is marked", async () => {
+  renderAt(`/evals/${BATCH_BASELINE}?variant=production&run=${RUN_PROD_3}`);
+
+  const table = (await screen.findByRole("heading", { name: "Evidence" })).nextElementSibling as HTMLElement;
+  const parent = within(table).getByRole("row", { name: /parent/ });
+  expect(parent).toHaveTextContent("not found in the step it cites");
+  expect(within(table).getByRole("row", { name: /user/ })).not.toHaveTextContent("not found");
+
+  const steps = screen.getByRole("region", { name: "Agent steps" });
+  expect(steps.querySelector("details")!.open).toBe(false);
+  await userEvent.click(within(parent).getByRole("button", { name: "Open step 2" }));
+  expect(steps.querySelector("details")!.open).toBe(true);
+  expect(within(steps).getAllByRole("option")[1]).toHaveAttribute("aria-selected", "true");   // step 2 is the 2nd row
+  await within(steps).findByText(/arun\.m/);
 });

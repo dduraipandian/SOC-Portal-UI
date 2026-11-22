@@ -219,7 +219,7 @@ async function select(index: number) {
 test("the request is selected first and only the shown step is fetched, once the steps are opened", async () => {
   const fetched: string[] = [];
   server.events.on("request:start", ({ request }) => {
-    if (request.url.includes("/steps/")) fetched.push(new URL(request.url).pathname);
+    if (request.url.includes("/trace/")) fetched.push(new URL(request.url).pathname);
   });
   renderAt("/cases/41");
   await screen.findByRole("region", { name: "Agent steps" });
@@ -227,10 +227,10 @@ test("the request is selected first and only the shown step is fetched, once the
 
   const { list, pane } = await openSteps();
   expect(within(list).getAllByRole("option")[0]).toHaveAttribute("aria-selected", "true");
-  expect(within(pane).getByRole("heading", { name: "Request" })).toBeVisible();
+  expect(within(pane).getByRole("heading", { name: /Request$/ })).toBeVisible();
   await within(pane).findByText(`Case 41: 3 alert(s) on host(s) web-srv-01. ${XSS}`);  // shown as text
   expect(pane.querySelector("img")).toBeNull();
-  expect(fetched).toEqual(["/api/investigations/aaaaaaaa-0000-0000-0000-000000000041/steps/0"]);
+  expect(fetched).toEqual(["/api/investigations/aaaaaaaa-0000-0000-0000-000000000041/trace/0"]);
   server.events.removeAllListeners();
 });
 
@@ -295,8 +295,8 @@ test("a model step shows its thinking summary above its message, only when it ha
 });
 
 test("a tool step from a run saved before outputs were kept says so", async () => {
-  server.use(http.get(api("/investigations/:id/steps/:index"), () =>
-    HttpResponse.json({ investigation_id: "aaaaaaaa-0000-0000-0000-000000000041", index: 2, kind: "tool",
+  server.use(http.get(api("/investigations/:id/trace/:seq"), () =>
+    HttpResponse.json({ investigation_id: "aaaaaaaa-0000-0000-0000-000000000041", trace_seq: 2, kind: "tool",
                         name: "edr.process_tree", text: null, thought: null, args: { host: "web-srv-01" }, result: null,
                         error: null })));
   renderAt("/cases/41");
@@ -320,8 +320,8 @@ const stepsBox = () => screen.getByRole("region", { name: "Agent steps" }).query
 const toggleSteps = () => userEvent.click(stepsBox().querySelector("summary")!);
 const OLDER = run(1, {
   verdict: "benign", rationale: "Routine admin work.",
-  evidence: [{ ...INVESTIGATIONS_41.latest!.evidence[0], tool: "older.tool", result_excerpt: "older excerpt" }],
-  steps: [{ index: 0, kind: "tool", name: "older_step", started_at: "2026-11-07T09:00:00Z", duration_ms: 500,
+  evidence: [{ ...INVESTIGATIONS_41.latest!.evidence[0], value: "older excerpt" }],
+  steps: [{ trace_seq: 0, kind: "tool", name: "older_step", started_at: "2026-11-07T09:00:00Z", duration_ms: 500,
             tokens_in: 0, tokens_out: 0, summary: "An older run." }],
 });
 
@@ -395,7 +395,7 @@ test("selecting a card loads that investigation's evidence and agent steps; the 
   const summary = screen.getByRole("region", { name: "Summary" });
   expect(summary).toHaveTextContent("82% confidence");                     // the case verdict is still the latest's
   await userEvent.click(cards()[0]);
-  expect(within(screen.getByRole("region", { name: "Investigation" })).getByText("edr.process_tree", { selector: "td" }))
+  expect(within(screen.getByRole("region", { name: "Investigation" })).getByText("edr.process_tree", { selector: "td.cite span" }))
     .toBeInTheDocument();
 });
 
@@ -456,7 +456,7 @@ test("alert command and evidence excerpt render as text", async () => {   // RF3
     http.get(api("/investigations/41"), () => HttpResponse.json({
       ...INVESTIGATIONS_41,
       latest: { ...INVESTIGATIONS_41.latest!, rationale: XSS,
-                evidence: [{ ...INVESTIGATIONS_41.latest!.evidence[0], result_excerpt: XSS }] },
+                evidence: [{ ...INVESTIGATIONS_41.latest!.evidence[0], value: XSS }] },
     })),
   );
   const { container } = renderAt("/cases/41");

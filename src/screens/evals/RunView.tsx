@@ -1,7 +1,9 @@
+import { useState } from "react";
 import { useEvalRun } from "../../api/hooks";
+import { EvidenceTable } from "../../components/EvidenceTable";
 import { ErrorState } from "../../components/ErrorState";
 import { Section } from "../../components/Section";
-import { AgentSteps } from "../case/AgentSteps";
+import { AgentSteps, type ShowStep } from "../case/AgentSteps";
 import { ReviewForm } from "./ReviewForm";
 import { diagnostics, why } from "./why";
 
@@ -10,6 +12,7 @@ const CHECKS = ["verdict", "process", "grounding"] as const;
 /** One run, read like an investigation: why it is (in)correct, the review, the verdict and evidence, the steps. */
 export function RunView({ runId }: { runId: string }) {
   const q = useEvalRun(runId);
+  const [show, setShow] = useState<(ShowStep & { runId: string }) | null>(null);  // a citation clicked
   if (q.error) return <ErrorState error={q.error} onRetry={() => q.refetch()} />;
   if (!q.data) return <p className="muted">Loading…</p>;
   const run = q.data;
@@ -49,22 +52,13 @@ export function RunView({ runId }: { runId: string }) {
         <dt>Verdict</dt><dd>{run.verdict ?? "none"}{run.confidence ? ` (${run.confidence})` : ""}</dd>
         <dt>Rationale</dt><dd>{run.rationale ?? "none"}</dd>
       </dl>
-      {run.evidence.length > 0 && (
+      {run.verdict && (
         <>
           <h3>Evidence</h3>
-          <div className="table-scroll">
-            <table className="grid">
-              <thead><tr><th>Fact</th><th>Value</th></tr></thead>
-              <tbody>
-                {run.evidence.map((e, i) => (
-                  <tr key={i}><td>{String(e.args.fact ?? e.tool)}</td><td className="cmd">{e.result_excerpt}</td></tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <EvidenceTable evidence={run.evidence} steps={run.steps} onCite={(step) => setShow({ step, runId })} />
         </>
       )}
-      <AgentSteps source={{ kind: "eval-run", id: run.run_id }} steps={run.steps} />
+      <AgentSteps key={`steps-${run.run_id}`} source={{ kind: "eval-run", id: run.run_id }} steps={run.steps} show={show?.runId === runId ? show : null} />
     </div>
   );
 }

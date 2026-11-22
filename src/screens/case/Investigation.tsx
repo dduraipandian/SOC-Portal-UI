@@ -3,11 +3,12 @@ import type { Schemas } from "../../api/client";
 import { useInvestigations, useStartInvestigation } from "../../api/hooks";
 import { refusalText } from "../../api/problems";
 import { Age } from "../../components/Age";
+import { EvidenceTable } from "../../components/EvidenceTable";
 import { ErrorState } from "../../components/ErrorState";
 import { Section } from "../../components/Section";
 import { StatusBadge } from "../../components/StatusBadge";
 import { formatUtc } from "../../components/time";
-import { AgentSteps } from "./AgentSteps";
+import { AgentSteps, type ShowStep } from "./AgentSteps";
 
 type View = Schemas["InvestigationView"];
 
@@ -19,6 +20,7 @@ export const MAX_RUNS = 10;
 function Snapshot({ inv, stepsOpen, onStepsOpenChange }: {
   inv: View; stepsOpen: boolean; onStepsOpenChange: (open: boolean) => void;
 }) {
+  const [show, setShow] = useState<ShowStep | null>(null);
   return (
     <>
       <dl className="kv">
@@ -26,23 +28,9 @@ function Snapshot({ inv, stepsOpen, onStepsOpenChange }: {
         <dt>Evidence hash</dt><dd className="hash">{inv.evidence_hash}</dd>
       </dl>
       <h3>Evidence</h3>
-      <div className="table-scroll">
-        <table className="grid">
-          <thead><tr><th>Tool</th><th>Arguments</th><th>Result excerpt</th><th>Digest</th></tr></thead>
-          <tbody>
-            {inv.evidence.map((e, i) => (
-              <tr key={i}>
-                <td>{e.tool}</td>
-                <td className="cmd">{JSON.stringify(e.args)}</td>
-                <td className="cmd">{e.result_excerpt}</td>
-                <td className="hash" title={e.result_digest}>{e.result_digest.slice(0, 12)}…</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      <EvidenceTable evidence={inv.evidence} steps={inv.steps} onCite={(step) => setShow({ step })} />
       <AgentSteps source={{ kind: "investigation", id: inv.investigation_id }} steps={inv.steps} open={stepsOpen}
-                  onOpenChange={onStepsOpenChange} />
+                  onOpenChange={onStepsOpenChange} show={show} />
     </>
   );
 }

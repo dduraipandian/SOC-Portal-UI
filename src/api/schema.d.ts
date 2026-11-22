@@ -44,7 +44,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/investigations/{investigation_id}/steps/{index}": {
+    "/investigations/{investigation_id}/trace/{trace_seq}": {
         parameters: {
             query?: never;
             header?: never;
@@ -379,7 +379,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/evals/runs/{run_id}/steps/{index}": {
+    "/evals/runs/{run_id}/trace/{trace_seq}": {
         parameters: {
             query?: never;
             header?: never;
@@ -716,18 +716,22 @@ export interface components {
             expires_at: string;
             status: components["schemas"]["ProposalStatus"];
         };
+        /**
+         * @description One fact the agent cited: its value, copied from the step it cites (AgentStep.step; 0 is the case).
+         *     step and verified are null for evidence saved before citations.
+         */
         EvidenceItem: {
-            tool: string;
-            args: {
-                [key: string]: unknown;
-            };
-            result_digest: string;
-            result_excerpt: string;
-            /** Format: date-time */
-            captured_at: string;
+            fact: string;
+            value: string;
+            step: number | null;
+            /** @description whether the value is in the step it cites */
+            verified: boolean | null;
         };
         AgentStep: {
-            index: number;
+            /** @description its position in the trace: how its detail is fetched */
+            trace_seq: number;
+            /** @description the agent's own step number, which evidence cites; the request is 0 */
+            step?: number | null;
             /**
              * @description request: what the agent was asked (first); llm: a model call; tool: a tool call
              * @enum {string}
@@ -754,7 +758,7 @@ export interface components {
         StepDetail: {
             /** Format: uuid */
             investigation_id: string;
-            index: number;
+            trace_seq: number;
             /**
              * @description request: what the agent was asked (first); llm: a model call; tool: a tool call
              * @enum {string}
@@ -1089,8 +1093,8 @@ export interface operations {
             header?: never;
             path: {
                 investigation_id: string;
-                /** @description AgentStep.index */
-                index: number;
+                /** @description AgentStep.trace_seq */
+                trace_seq: number;
             };
             cookie?: never;
         };
@@ -1608,8 +1612,8 @@ export interface operations {
             header?: never;
             path: {
                 run_id: string;
-                /** @description AgentStep.index */
-                index: number;
+                /** @description AgentStep.trace_seq */
+                trace_seq: number;
             };
             cookie?: never;
         };

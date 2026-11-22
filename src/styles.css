@@ -365,6 +365,10 @@ label { display: inline-flex; flex-direction: column; gap: 3px; font-size: var(-
 /* a row: the name with time and tokens on the right, then one muted line of summary (all of it is in the pane) */
 .step-head { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
 .step-head strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.step-no { font-family: var(--mono); font-size: var(--step--1); color: var(--ink-3); font-variant-numeric: tabular-nums; }
+.step-no::before { content: "["; } .step-no::after { content: "]"; }
+.evidence td.cite { white-space: nowrap; font-family: var(--mono); font-size: var(--step--1); }
+.evidence .unverified { color: var(--warn); cursor: help; }
 .steps .meta { margin-left: auto; color: var(--ink-3); font: 11.5px var(--mono); white-space: nowrap; }
 .steps p { margin: 3px 0 0; color: var(--ink-2); font-size: var(--step--1); overflow-wrap: anywhere; }
 .steps li[role="option"] p { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

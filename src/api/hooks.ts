@@ -38,15 +38,17 @@ export type StepSource = { kind: "investigation" | "eval-run"; id: string };
 
 /** One agent step in full (the model's message, the tool's input and output), fetched only when an analyst opens
  *  the step. It is stored with the run and never changes, so it is cached for good and not polled. */
-export function useAgentStep(source: StepSource, index: number) {
+export function useAgentStep(source: StepSource, traceSeq: number) {
   return useQuery({
-    queryKey: ["agent-step", source.kind, source.id, index],
+    queryKey: ["agent-step", source.kind, source.id, traceSeq],
     queryFn: () =>
       source.kind === "investigation"
-        ? unwrap(api.GET("/investigations/{investigation_id}/steps/{index}", {
-            params: { path: { investigation_id: source.id, index } },
+        ? unwrap(api.GET("/investigations/{investigation_id}/trace/{trace_seq}", {
+            params: { path: { investigation_id: source.id, trace_seq: traceSeq } },
           }))
-        : unwrap(api.GET("/evals/runs/{run_id}/steps/{index}", { params: { path: { run_id: source.id, index } } })),
+        : unwrap(api.GET("/evals/runs/{run_id}/trace/{trace_seq}", {
+            params: { path: { run_id: source.id, trace_seq: traceSeq } },
+          })),
     staleTime: Infinity,
   });
 }

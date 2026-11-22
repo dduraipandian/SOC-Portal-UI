@@ -86,36 +86,35 @@ export const INVESTIGATIONS_41: S["Investigations"] = {
   latest: {
     schema_version: "1", investigation_id: "aaaaaaaa-0000-0000-0000-000000000041", case_id: 41, case_version: 3,
     verdict: "malicious", confidence: 0.82, rationale: "Beaconing to a known-bad IP from web-srv-01.",
-    evidence: [{ tool: "edr.process_tree", args: { host: "web-srv-01" }, result_digest: "c".repeat(64),
-                 result_excerpt: "curl -s http://203.0.113.50:8443/beacon", captured_at: T0 }],
+    evidence: [{ fact: "beacon command", value: "curl -s http://203.0.113.50:8443/beacon", step: 2, verified: true }],
     evidence_hash: "e".repeat(64), completed_at: T0,
     steps: [
-      { index: 0, kind: "request", name: "request", started_at: T0, duration_ms: 0, tokens_in: 0, tokens_out: 0,
+      { trace_seq: 0, step: 0, kind: "request", name: "request", started_at: T0, duration_ms: 0, tokens_in: 0, tokens_out: 0,
         summary: "the question given to the agent" },
-      { index: 1, kind: "llm", name: "plan", started_at: T0, duration_ms: 1840, tokens_in: 2310, tokens_out: 212,
+      { trace_seq: 1, step: 1, kind: "llm", name: "plan", started_at: T0, duration_ms: 1840, tokens_in: 2310, tokens_out: 212,
         summary: "Decide which tools to call." },
-      { index: 2, kind: "tool", name: "edr.process_tree", started_at: T0, duration_ms: 120, tokens_in: 0,
+      { trace_seq: 2, step: 2, kind: "tool", name: "edr.process_tree", started_at: T0, duration_ms: 120, tokens_in: 0,
         tokens_out: 0, summary: "Process tree." },
-      { index: 3, kind: "llm", name: "verdict", started_at: T0, duration_ms: 2410, tokens_in: 3120,
+      { trace_seq: 3, step: 3, kind: "llm", name: "verdict", started_at: T0, duration_ms: 2410, tokens_in: 3120,
         tokens_out: 388, summary: "Verdict: malicious." },
     ],
   },
 };
 
-/** The full steps of INVESTIGATIONS_41's latest run, by index, as GET /investigations/{id}/steps/{index} returns them. */
+/** The full steps of INVESTIGATIONS_41's latest run, by trace_seq, as GET /investigations/{id}/trace/{trace_seq} returns them. */
 // typed, not cast, so a field the contract adds has to be filled in here too
 const steps41: Omit<S["StepDetail"], "investigation_id">[] = [
-  { index: 0, kind: "request", name: "request", text: `Case 41: 3 alert(s) on host(s) web-srv-01. ${XSS}`,
+  { trace_seq: 0, kind: "request", name: "request", text: `Case 41: 3 alert(s) on host(s) web-srv-01. ${XSS}`,
     thought: null, args: null, result: null, error: null },
-  { index: 1, kind: "llm", name: "plan", text: null, thought: "The alert is on web-srv-01; start with its process tree.",
+  { trace_seq: 1, kind: "llm", name: "plan", text: null, thought: "The alert is on web-srv-01; start with its process tree.",
     args: null, result: null, error: null },
-  { index: 2, kind: "tool", name: "edr.process_tree", text: null, thought: null, args: { host: "web-srv-01", pid: 4312 },
+  { trace_seq: 2, kind: "tool", name: "edr.process_tree", text: null, thought: null, args: { host: "web-srv-01", pid: 4312 },
     result: { found: true, process: { cmdline: "curl -s http://203.0.113.50:8443/beacon" }, note: XSS }, error: null },
-  { index: 3, kind: "llm", name: "verdict", text: "Beaconing confirmed; submitting.", thought: null, args: null,
+  { trace_seq: 3, kind: "llm", name: "verdict", text: "Beaconing confirmed; submitting.", thought: null, args: null,
     result: null, error: null },
 ];
 export const STEPS_41: Record<number, S["StepDetail"]> = Object.fromEntries(
-  steps41.map((s) => [s.index, { investigation_id: "aaaaaaaa-0000-0000-0000-000000000041", ...s }]),
+  steps41.map((s) => [s.trace_seq, { investigation_id: "aaaaaaaa-0000-0000-0000-000000000041", ...s }]),
 );
 
 export function proposal(over: Partial<Proposal> = {}): Proposal {
@@ -226,8 +225,8 @@ export const EVAL_BATCH_SMOKE: S["EvalBatchDetail"] = {
 };
 
 const evalSteps: S["AgentStep"][] = [
-  { index: 0, kind: "request", name: "request", started_at: "2026-11-21T01:40:00Z", duration_ms: 0, tokens_in: 0, tokens_out: 0, summary: "Case 3: 1 alert" },
-  { index: 1, kind: "tool", name: "get_process_tree", started_at: "2026-11-21T01:40:09Z", duration_ms: 24, tokens_in: 0, tokens_out: 0,
+  { trace_seq: 0, step: 0, kind: "request", name: "request", started_at: "2026-11-21T01:40:00Z", duration_ms: 0, tokens_in: 0, tokens_out: 0, summary: "Case 3: 1 alert" },
+  { trace_seq: 1, step: 2, kind: "tool", name: "get_process_tree", started_at: "2026-11-21T01:40:09Z", duration_ms: 24, tokens_in: 0, tokens_out: 0,
     summary: "found", args: { pid: 472, host: "eng-ws-03" } },
 ];
 
@@ -236,7 +235,8 @@ export function evalRun(over: Partial<S["EvalRunDetail"]> = {}): S["EvalRunDetai
     run_id: RUN_PROD_3, batch_id: BATCH_BASELINE, case_id: 3, variant: "production", attempt: 1, outcome: "incorrect",
     reviewable: false, settings: { provider: "ollama", model: "bonsai-2:4b" }, status: "success", verdict: "malicious",
     confidence: "medium", rationale: "arun.m ran non-interactive sudo to read /etc/shadow.", error: null,
-    evidence: [{ tool: "submit_investigation", args: { fact: "user" }, result_digest: "d".repeat(64), result_excerpt: "user: root", captured_at: "2026-11-21T01:41:09Z" }],
+    evidence: [{ fact: "user", value: "arun.m", step: 2, verified: true },
+               { fact: "parent", value: "sudo -n cat /etc/shadow", step: 2, verified: false }],
     grades: [
       { grader: "verdict", version: 1, passed: true, details: { expected: "malicious", actual: "malicious" } },
       { grader: "process", version: 1, passed: false, details: { tree_at_alert_time: false, history_search: false, looked_before_submit: true } },
@@ -271,6 +271,6 @@ EVAL_RUNS[RUN_PROD_1] = evalRun({
 });
 
 export const EVAL_STEP: S["StepDetail"] = {
-  investigation_id: RUN_PROD_3, index: 1, kind: "tool", name: "get_process_tree", text: null, thought: null,
+  investigation_id: RUN_PROD_3, trace_seq: 1, kind: "tool", name: "get_process_tree", text: null, thought: null,
   args: { pid: 472, host: "eng-ws-03" }, result: { found: true, lineage: [{ pid: 470, user: "arun.m" }] }, error: null,
 };

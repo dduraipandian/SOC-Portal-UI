@@ -14,16 +14,22 @@ const DOT: Record<Step["kind"], string> = { request: "Q", llm: "AI", tool: "⚙"
 /** How a step is named in the list and the pane: "Request" and "Model" once each (their API names repeat the kind),
  *  and a tool by its own name, marked as a tool. */
 function StepLabel({ step }: { step: Step }) {
-  if (step.kind === "request") return <strong>Request</strong>;
+  // the request and tool calls carry the number evidence cites them by ([0] is the case)
+  const no = step.kind !== "llm" && step.step != null && <span className="step-no">{step.step}</span>;
+  if (step.kind === "request") return <>{no}<strong>Request</strong></>;
   if (step.kind === "llm") return <strong>Model</strong>;
-  return <><strong>{step.name}</strong><span className="muted">tool</span></>;
+  return <>{no}<strong>{step.name}</strong><span className="muted">tool</span></>;
 }
+
+/** A request to show one step, by the number evidence cites. A new object each time, so citing the same step twice
+ *  still brings it back into view. */
+export type ShowStep = { step: number };
 
 /** The selected step in full, fetched when it is shown: the question the agent was given, the model's thinking
  *  summary and message, or the tool's input and output, as stored when the run happened. Everything here is shown as
  *  text and never interpreted: tool output is the vendor's data, and the request quotes alert fields. */
 function StepDetail({ source, step }: { source: StepSource; step: Step }) {
-  const q = useAgentStep(source, step.index);
+  const q = useAgentStep(source, step.trace_seq);
   if (q.isPending) return <p className="muted">Loading…</p>;
   if (q.error) return <p role="alert" className="refusal">{refusalText(q.error)}</p>;
   const d = q.data;
@@ -58,12 +64,14 @@ const meta = (s: Step) =>
 /** What the agent did, in order: the request it was given, then its model and tool steps. The list is on the left and
  *  the selected step's detail on the right; Up/Down (and Home/End) move the selection. Collapsed by default (a long run
  *  would push everything below it far down the page); the totals stay visible in the summary line. */
-export function AgentSteps({ source, steps, title = "Agent steps", open, onOpenChange }: {
+export function AgentSteps({ source, steps, title = "Agent steps", open, onOpenChange, show }: {
   /** The run the steps belong to (an investigation or an eval run): the selected step's detail is fetched from it. */
   source: StepSource;
   steps: Step[]; title?: string;
   /** Controlled when given (the parent keeps it across investigations); otherwise the box manages itself, closed. */
   open?: boolean; onOpenChange?: (open: boolean) => void;
+  /** A citation was clicked: open the box with that step selected. */
+  show?: ShowStep | null;
 }) {
   const ids = useId();
   const [shown, setShown] = useState(open ?? false);              // nothing is fetched while the box is closed
@@ -90,6 +98,15 @@ export function AgentSteps({ source, steps, title = "Agent steps", open, onOpenC
     document.addEventListener("keydown", onEsc);
     return () => { document.removeEventListener("keydown", onEsc); document.body.style.overflow = overflow; };
   }, [expanded]);
+
+  useEffect(() => {
+    if (!show) return;
+    const at = steps.findIndex((s) => s.step === show.step);
+    if (at < 0) return;
+    setSelected(at);
+    if (box.current && !box.current.open) box.current.open = true;  // fires onToggle, so it also loads
+    box.current?.scrollIntoView?.({ block: "start", behavior: "smooth" });
+  }, [show]);
 
   useEffect(() => {
     // keep the selection visible when the keyboard moves it past the edge of the scrolling list
@@ -128,7 +145,7 @@ export function AgentSteps({ source, steps, title = "Agent steps", open, onOpenC
             <ol className="steps" role="listbox" aria-label="Steps" tabIndex={0} onKeyDown={onKeyDown}
                 aria-activedescendant={current ? optionId(selected) : undefined}>
               {steps.map((s, i) => (
-                <li key={s.index} id={optionId(i)} role="option" aria-selected={i === selected}
+                <li key={s.trace_seq} id={optionId(i)} role="option" aria-selected={i === selected}
                     onClick={() => setSelected(i)}>
                   <span className="dot" data-kind={s.kind} aria-hidden="true">{DOT[s.kind]}</span>
                   <div>
@@ -146,7 +163,7 @@ export function AgentSteps({ source, steps, title = "Agent steps", open, onOpenC
             {current && (
               <>
                 <h3 className="step-pane-title step-head"><StepLabel step={current} /></h3>
-                {shown && <StepDetail key={current.index} source={source} step={current} />}
+                {shown && <StepDetail key={current.trace_seq} source={source} step={current} />}
               </>
             )}
           </section>

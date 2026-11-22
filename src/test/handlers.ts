@@ -26,8 +26,8 @@ export const handlers = [
     Number(params.id) === 41
       ? HttpResponse.json(INVESTIGATIONS_41)
       : HttpResponse.json({ case_id: Number(params.id), agent_status: "pending", latest: null, history: [] })),
-  http.get(api("/investigations/:id/steps/:index"), ({ params }) => {
-    const step = params.id === INVESTIGATIONS_41.latest?.investigation_id ? STEPS_41[Number(params.index)] : undefined;
+  http.get(api("/investigations/:id/trace/:seq"), ({ params }) => {
+    const step = params.id === INVESTIGATIONS_41.latest?.investigation_id ? STEPS_41[Number(params.seq)] : undefined;
     return step ? HttpResponse.json(step) : HttpResponse.json({ error: "not_found" }, { status: 404 });
   }),
   http.get(api("/proposals"), ({ request }) => {
@@ -47,7 +47,7 @@ export const handlers = [
     const found = EVAL_RUNS[String(params.id)];
     return found ? HttpResponse.json(found) : HttpResponse.json({ error: "not_found" }, { status: 404 });
   }),
-  http.get(api("/evals/runs/:id/steps/:index"), ({ params }) =>
-    Number(params.index) === 1 ? HttpResponse.json({ ...EVAL_STEP, investigation_id: String(params.id) })
+  http.get(api("/evals/runs/:id/trace/:seq"), ({ params }) =>
+    Number(params.seq) === 1 ? HttpResponse.json({ ...EVAL_STEP, investigation_id: String(params.id) })
                                : HttpResponse.json({ error: "not_found" }, { status: 404 })),
 ];
