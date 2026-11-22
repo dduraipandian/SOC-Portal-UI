@@ -5,6 +5,7 @@ import { useEffect } from "react";
 import { useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useEvalBatch, useEvalBatches } from "../api/hooks";
 import { Age } from "../components/Age";
+import { CopyText } from "../components/CopyText";
 import { ErrorState } from "../components/ErrorState";
 import { BatchList } from "./evals/BatchList";
 import { Scoreboard } from "./evals/Scoreboard";
@@ -58,6 +59,7 @@ export function Evals() {
                   : <>not finished{d.batch.last_run_at && <> · last run <Age at={d.batch.last_run_at} /></>}</>}
                 {" "}· cases {d.cases.map((c) => `${c.case_id} (${c.scenario_id})`).join(", ")} · k={d.batch.k}
               </p>
+              <p className="batch-id muted">batch <CopyText value={d.batch.batch_id} label="Copy batch id" /></p>
             </div>
             <div className="eval-facts">
               <div><b>{d.batch.runs_done} / {d.batch.runs_total}</b><span className="muted">runs done</span></div>

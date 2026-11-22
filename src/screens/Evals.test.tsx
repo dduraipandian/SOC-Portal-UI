@@ -178,3 +178,14 @@ test("saving a review never moves the page to another run", async () => {
   expect(runCards()[0]).toHaveAttribute("aria-pressed", "true");
   expect(within(why()).getByText(/analyst: ok/)).toBeInTheDocument();
 });
+
+test("the batch id is shown and can be copied", async () => {
+  const user = userEvent.setup();  // gives the test a clipboard to read back
+  renderAt(`/evals/${BATCH_BASELINE}`);
+
+  expect(await screen.findByText(BATCH_BASELINE)).toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: "Copy batch id" }));
+
+  expect(await navigator.clipboard.readText()).toBe(BATCH_BASELINE);
+  expect(screen.getByRole("button", { name: "Copy batch id" })).toHaveTextContent("Copied");
+});

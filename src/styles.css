@@ -537,3 +537,8 @@ button.link { background: none; border: 0; padding: 0; color: var(--focus); font
   .batch-list { border-right: 0; position: static; height: auto; }
   .evals-main { padding: 0; }
 }
+
+.copy-text { display: inline-flex; align-items: center; gap: 8px; }
+.copy-text code { font-family: var(--mono); font-size: var(--step--1); color: var(--ink-2); }
+.batch-id { margin: 4px 0 0; font-size: var(--step--1); }
+.button.small { padding: 2px 10px; font-size: 12px; min-height: 0; }
