@@ -16,7 +16,7 @@ export function Health() {
   const now = Date.now();
   return (
     <section>
-      <h1>Pipeline health</h1>
+      <div className="page-head"><h1>Pipeline health</h1></div>
       <div className="filters">
         <button type="button" className="button quiet" onClick={() => q.refetch()}>Refresh</button>
         {h && <span className="muted">updated {formatAge(new Date(q.dataUpdatedAt).toISOString())}</span>}

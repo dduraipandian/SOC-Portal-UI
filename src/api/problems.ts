@@ -25,6 +25,8 @@ export function problemMessage(problem: Problem): string {
       return "Run a fresh simulation before renewing.";
     case "not_found":
       return "It no longer exists.";
+    case "already_investigating":
+      return "The agent is already investigating this case.";
     default:
       return `The request was refused (${problem.error}).`;
   }

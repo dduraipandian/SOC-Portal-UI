@@ -14,7 +14,7 @@ export function Proposals() {
   const q = useProposals();
   return (
     <section>
-      <h1>Proposals</h1>
+      <div className="page-head"><h1>Proposals</h1></div>
       <div className="filters">
         <button type="button" className="button quiet" onClick={() => q.refetch()}>Refresh</button>
       </div>

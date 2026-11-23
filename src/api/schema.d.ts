@@ -33,6 +33,30 @@ export interface paths {
         };
         get: operations["getInvestigations"];
         put?: never;
+        /**
+         * Start an investigation of the case now. It runs in the background: the case's agent_status is
+         *     `investigating` until it ends, and GET shows the result. Refused while a run of the case is active.
+         */
+        post: operations["startInvestigation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/investigations/{investigation_id}/trace/{trace_seq}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * One agent step in full, for when an analyst opens it: what the model wrote and what the tool
+         *     returned, exactly as stored when the run happened (not fetched again from the vendor).
+         */
+        get: operations["getInvestigationStep"];
+        put?: never;
         post?: never;
         delete?: never;
         options?: never;
@@ -301,6 +325,97 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/evals/batches": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Eval batches, newest first. Batches are started from the CLI (`pipeline.soc_agent.evals.run`). */
+        get: operations["listEvalBatches"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/evals/batches/{batch_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * One batch: its scoreboard (one row per case and variant, only cases with a checked label, the same numbers
+         *     as `evals.report`) and every run.
+         */
+        get: operations["getEvalBatch"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/evals/runs/{run_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** One eval run with its grades, evidence and step list. */
+        get: operations["getEvalRun"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/evals/runs/{run_id}/trace/{trace_seq}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** One step of an eval run in full; the same shape as getInvestigationStep (`investigation_id` is the run id). */
+        get: operations["getEvalRunStep"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/evals/runs/{run_id}/review": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * The human rationale review of a run: one per run, saving again replaces it. 409 `not_reviewable` for a run
+         *     that failed a code check or was an infra failure.
+         */
+        put: operations["reviewEvalRun"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -309,7 +424,8 @@ export interface components {
             /**
              * @description not_found, pipeline_unavailable; proposals: case_changed, investigation_changed, expired,
              *     hash_mismatch, already_decided, not_undoable; cases: version_changed, not_open;
-             *     rules: version_changed, invalid_state, simulation_required.
+             *     rules: version_changed, invalid_state, simulation_required; investigations: already_investigating;
+             *     evals: not_reviewable.
              */
             error: string;
             message?: string;
@@ -600,20 +716,27 @@ export interface components {
             expires_at: string;
             status: components["schemas"]["ProposalStatus"];
         };
+        /**
+         * @description One fact the agent cited: its value, copied from the step it cites (AgentStep.step; 0 is the case).
+         *     step and verified are null for evidence saved before citations.
+         */
         EvidenceItem: {
-            tool: string;
-            args: {
-                [key: string]: unknown;
-            };
-            result_digest: string;
-            result_excerpt: string;
-            /** Format: date-time */
-            captured_at: string;
+            fact: string;
+            value: string;
+            step: number | null;
+            /** @description whether the value is in the step it cites */
+            verified: boolean | null;
         };
         AgentStep: {
-            index: number;
-            /** @enum {string} */
-            kind: "llm" | "tool";
+            /** @description its position in the trace: how its detail is fetched */
+            trace_seq: number;
+            /** @description the agent's own step number, which evidence cites; the request is 0 */
+            step?: number | null;
+            /**
+             * @description request: what the agent was asked (first); llm: a model call; tool: a tool call
+             * @enum {string}
+             */
+            kind: "request" | "llm" | "tool";
             name: string;
             /** Format: date-time */
             started_at: string;
@@ -621,6 +744,38 @@ export interface components {
             tokens_in: number;
             tokens_out: number;
             summary: string;
+            /** @description tool: the arguments the model gave */
+            args?: {
+                [key: string]: unknown;
+            } | null;
+            /** @description why the model call or tool call failed */
+            error?: string | null;
+        };
+        /**
+         * @description One AgentStep in full (getInvestigationStep). text and result are null for runs saved before the
+         *     trace recorded them.
+         */
+        StepDetail: {
+            /** Format: uuid */
+            investigation_id: string;
+            trace_seq: number;
+            /**
+             * @description request: what the agent was asked (first); llm: a model call; tool: a tool call
+             * @enum {string}
+             */
+            kind: "request" | "llm" | "tool";
+            name: string;
+            /** @description llm: what the model wrote besides its tool calls */
+            text: string | null;
+            /** @description llm: a summary of the model's thinking */
+            thought: string | null;
+            /** @description tool: the arguments the model gave */
+            args: {
+                [key: string]: unknown;
+            } | null;
+            /** @description tool: what the tool returned to the model, any JSON */
+            result: unknown;
+            error: string | null;
         };
         /** @description contracts.agent.InvestigationSnapshot plus the agent's step trace */
         InvestigationView: {
@@ -646,6 +801,141 @@ export interface components {
             latest: components["schemas"]["InvestigationView"] | null;
             /** @description earlier investigations, newest first */
             history: components["schemas"]["InvestigationView"][];
+            /** @description the newest run, when it failed; null when the newest run produced a verdict or none ran yet */
+            last_failure: components["schemas"]["InvestigationFailure"] | null;
+        };
+        /** @description a run that ended without a verdict, and what it did before it stopped */
+        InvestigationFailure: {
+            /** Format: uuid */
+            investigation_id: string;
+            case_version: number;
+            /** @description why it stopped, e.g. Agent step limit reached. */
+            error: string;
+            /** Format: date-time */
+            completed_at: string;
+            duration_ms: number;
+            steps: components["schemas"]["AgentStep"][];
+        };
+        InvestigationStarted: {
+            case_id: number;
+            /** @constant */
+            agent_status: "investigating";
+        };
+        /**
+         * @description A run's outcome (report.run_outcome): incorrect when a code check failed or the human review said so,
+         *     pending_review until reviewed, correct after a passing review; infra runs do not count.
+         * @enum {string}
+         */
+        EvalOutcome: "correct" | "incorrect" | "pending_review" | "infra";
+        EvalBatchSummary: {
+            /** Format: uuid */
+            batch_id: string;
+            note: string | null;
+            /** Format: date-time */
+            started_at: string;
+            /** Format: date-time */
+            finished_at: string | null;
+            /** Format: date-time */
+            last_run_at: string | null;
+            variants: string[];
+            case_ids: number[];
+            k: number;
+            /** @description runs that count: infra failures left out */
+            runs_done: number;
+            /** @description variants x cases x k */
+            runs_total: number;
+        };
+        EvalCase: {
+            case_id: number;
+            scenario_id: string;
+            expected_verdict: string;
+        };
+        EvalVariant: {
+            name: string;
+            provider: string;
+            model: string;
+            reasoning_level: string | null;
+            prompt_file: string;
+        };
+        EvalScoreRow: {
+            case_id: number;
+            scenario_id: string;
+            variant: string;
+            /** @description runs that count */
+            k: number;
+            correct: number;
+            pending: number;
+            /** @description null while pending */
+            pass_k: boolean | null;
+            verdict: number;
+            process: number;
+            grounding: number;
+            rationale: number;
+            entities_missed: string[];
+            errors: number;
+            infra: number;
+            median_ms: number;
+            median_tokens: number;
+        };
+        EvalRunSummary: {
+            /** Format: uuid */
+            run_id: string;
+            case_id: number;
+            variant: string;
+            attempt: number;
+            outcome: components["schemas"]["EvalOutcome"];
+            verdict: string | null;
+            failure_kind: string | null;
+            duration_ms: number;
+            /** Format: date-time */
+            started_at: string;
+        };
+        EvalBatchDetail: {
+            batch: components["schemas"]["EvalBatchSummary"];
+            cases: components["schemas"]["EvalCase"][];
+            variants: components["schemas"]["EvalVariant"][];
+            rows: components["schemas"]["EvalScoreRow"][];
+            runs: components["schemas"]["EvalRunSummary"][];
+            pending_reviews: number;
+            infra: number;
+            median_ms: number;
+        };
+        EvalGrade: {
+            grader: string;
+            version: number;
+            /** @description null for diagnostics that only measure */
+            passed: boolean | null;
+            details: {
+                [key: string]: unknown;
+            };
+        };
+        EvalRunDetail: {
+            /** Format: uuid */
+            run_id: string;
+            /** Format: uuid */
+            batch_id: string;
+            case_id: number;
+            variant: string;
+            attempt: number;
+            outcome: components["schemas"]["EvalOutcome"];
+            /** @description code checks passed and not an infra failure */
+            reviewable: boolean;
+            settings: {
+                [key: string]: unknown;
+            };
+            status: string;
+            verdict: string | null;
+            confidence: string | null;
+            rationale: string | null;
+            error: string | null;
+            evidence: components["schemas"]["EvidenceItem"][];
+            grades: components["schemas"]["EvalGrade"][];
+            steps: components["schemas"]["AgentStep"][];
+            prompt_tokens: number;
+            output_tokens: number;
+            duration_ms: number;
+            /** Format: date-time */
+            started_at: string;
         };
     };
     responses: {
@@ -765,6 +1055,61 @@ export interface operations {
                     "application/json": components["schemas"]["Investigations"];
                 };
             };
+            404: components["responses"]["NotFound"];
+            502: components["responses"]["Unavailable"];
+        };
+    };
+    startInvestigation: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description The analyst recording the decision (fixed name in the lab; no authentication). */
+                "X-Analyst": components["parameters"]["Analyst"];
+            };
+            path: {
+                case_id: components["parameters"]["CaseId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Started */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InvestigationStarted"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            502: components["responses"]["Unavailable"];
+        };
+    };
+    getInvestigationStep: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                investigation_id: string;
+                /** @description AgentStep.trace_seq */
+                trace_seq: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The step */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StepDetail"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
             404: components["responses"]["NotFound"];
             502: components["responses"]["Unavailable"];
         };
@@ -1187,6 +1532,140 @@ export interface operations {
                     "application/json": components["schemas"]["Health"];
                 };
             };
+            502: components["responses"]["Unavailable"];
+        };
+    };
+    listEvalBatches: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Batches */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EvalBatchSummary"][];
+                };
+            };
+            502: components["responses"]["Unavailable"];
+        };
+    };
+    getEvalBatch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                batch_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The batch */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EvalBatchDetail"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            404: components["responses"]["NotFound"];
+            502: components["responses"]["Unavailable"];
+        };
+    };
+    getEvalRun: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The run */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EvalRunDetail"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            404: components["responses"]["NotFound"];
+            502: components["responses"]["Unavailable"];
+        };
+    };
+    getEvalRunStep: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+                /** @description AgentStep.trace_seq */
+                trace_seq: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The step */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StepDetail"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            404: components["responses"]["NotFound"];
+            502: components["responses"]["Unavailable"];
+        };
+    };
+    reviewEvalRun: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description The analyst recording the decision (fixed name in the lab; no authentication). */
+                "X-Analyst": components["parameters"]["Analyst"];
+            };
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    correct: boolean;
+                    note?: string | null;
+                };
+            };
+        };
+        responses: {
+            /** @description The run with its review */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EvalRunDetail"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
             502: components["responses"]["Unavailable"];
         };
     };

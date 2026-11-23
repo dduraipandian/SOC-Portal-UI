@@ -18,6 +18,7 @@ tags:
   - name: rules
   - name: agent
   - name: ops
+  - name: evals
 
 paths:
   /queue:
@@ -51,6 +52,42 @@ paths:
           content:
             application/json:
               schema: {$ref: "#/components/schemas/Investigations"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "502": {$ref: "#/components/responses/Unavailable"}
+    post:
+      operationId: startInvestigation
+      tags: [agent]
+      summary: |
+        Start an investigation of the case now. It runs in the background: the case's agent_status is
+        `investigating` until it ends, and GET shows the result. Refused while a run of the case is active.
+      parameters: [{$ref: "#/components/parameters/CaseId"}, {$ref: "#/components/parameters/Analyst"}]
+      responses:
+        "202":
+          description: Started
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/InvestigationStarted"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "409": {$ref: "#/components/responses/Conflict"}
+        "502": {$ref: "#/components/responses/Unavailable"}
+
+  /investigations/{investigation_id}/trace/{trace_seq}:
+    get:
+      operationId: getInvestigationStep
+      tags: [agent]
+      summary: |
+        One agent step in full, for when an analyst opens it: what the model wrote and what the tool
+        returned, exactly as stored when the run happened (not fetched again from the vendor).
+      parameters:
+        - {name: investigation_id, in: path, required: true, schema: {type: string, format: uuid}}
+        - {name: trace_seq, in: path, required: true, description: "AgentStep.trace_seq", schema: {type: integer, minimum: 0}}
+      responses:
+        "200":
+          description: The step
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/StepDetail"}
+        "400": {$ref: "#/components/responses/BadRequest"}
         "404": {$ref: "#/components/responses/NotFound"}
         "502": {$ref: "#/components/responses/Unavailable"}
 
@@ -352,6 +389,105 @@ paths:
               schema: {$ref: "#/components/schemas/Health"}
         "502": {$ref: "#/components/responses/Unavailable"}
 
+  /evals/batches:
+    get:
+      operationId: listEvalBatches
+      tags: [evals]
+      summary: Eval batches, newest first. Batches are started from the CLI (`pipeline.soc_agent.evals.run`).
+      responses:
+        "200":
+          description: Batches
+          content:
+            application/json:
+              schema: {type: array, items: {$ref: "#/components/schemas/EvalBatchSummary"}}
+        "502": {$ref: "#/components/responses/Unavailable"}
+
+  /evals/batches/{batch_id}:
+    get:
+      operationId: getEvalBatch
+      tags: [evals]
+      summary: |
+        One batch: its scoreboard (one row per case and variant, only cases with a checked label, the same numbers
+        as `evals.report`) and every run.
+      parameters:
+        - {name: batch_id, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        "200":
+          description: The batch
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/EvalBatchDetail"}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "502": {$ref: "#/components/responses/Unavailable"}
+
+  /evals/runs/{run_id}:
+    get:
+      operationId: getEvalRun
+      tags: [evals]
+      summary: One eval run with its grades, evidence and step list.
+      parameters:
+        - {name: run_id, in: path, required: true, schema: {type: string, format: uuid}}
+      responses:
+        "200":
+          description: The run
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/EvalRunDetail"}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "502": {$ref: "#/components/responses/Unavailable"}
+
+  /evals/runs/{run_id}/trace/{trace_seq}:
+    get:
+      operationId: getEvalRunStep
+      tags: [evals]
+      summary: One step of an eval run in full; the same shape as getInvestigationStep (`investigation_id` is the run id).
+      parameters:
+        - {name: run_id, in: path, required: true, schema: {type: string, format: uuid}}
+        - {name: trace_seq, in: path, required: true, description: "AgentStep.trace_seq", schema: {type: integer, minimum: 0}}
+      responses:
+        "200":
+          description: The step
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/StepDetail"}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "502": {$ref: "#/components/responses/Unavailable"}
+
+  /evals/runs/{run_id}/review:
+    put:
+      operationId: reviewEvalRun
+      tags: [evals]
+      summary: |
+        The human rationale review of a run: one per run, saving again replaces it. 409 `not_reviewable` for a run
+        that failed a code check or was an infra failure.
+      parameters:
+        - {name: run_id, in: path, required: true, schema: {type: string, format: uuid}}
+        - {$ref: "#/components/parameters/Analyst"}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [correct]
+              properties:
+                correct: {type: boolean}
+                note: {type: [string, "null"]}
+      responses:
+        "200":
+          description: The run with its review
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/EvalRunDetail"}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "409": {$ref: "#/components/responses/Conflict"}
+        "502": {$ref: "#/components/responses/Unavailable"}
+
 components:
   parameters:
     CaseId: {name: case_id, in: path, required: true, schema: {type: integer}}
@@ -406,7 +542,8 @@ components:
           description: |
             not_found, pipeline_unavailable; proposals: case_changed, investigation_changed, expired,
             hash_mismatch, already_decided, not_undoable; cases: version_changed, not_open;
-            rules: version_changed, invalid_state, simulation_required.
+            rules: version_changed, invalid_state, simulation_required; investigations: already_investigating;
+            evals: not_reviewable.
         message: {type: string}
         current_version: {type: [integer, "null"]}
         status: {type: [string, "null"]}
@@ -738,25 +875,46 @@ components:
 
     EvidenceItem:
       type: object
-      required: [tool, args, result_digest, result_excerpt, captured_at]
+      description: |
+        One fact the agent cited: its value, copied from the step it cites (AgentStep.step; 0 is the case).
+        step and verified are null for evidence saved before citations.
+      required: [fact, value, step, verified]
       properties:
-        tool: {type: string}
-        args: {type: object, additionalProperties: true}
-        result_digest: {type: string, pattern: "^[0-9a-f]{64}$"}
-        result_excerpt: {type: string}
-        captured_at: {type: string, format: date-time}
+        fact: {type: string}
+        value: {type: string}
+        step: {type: [integer, "null"]}
+        verified: {type: [boolean, "null"], description: "whether the value is in the step it cites"}
     AgentStep:
       type: object
-      required: [index, kind, name, started_at, duration_ms, tokens_in, tokens_out, summary]
+      required: [trace_seq, kind, name, started_at, duration_ms, tokens_in, tokens_out, summary]
       properties:
-        index: {type: integer}
-        kind: {type: string, enum: [llm, tool]}
+        trace_seq: {type: integer, description: "its position in the trace: how its detail is fetched"}
+        step: {type: [integer, "null"], description: "the agent's own step number, which evidence cites; the request is 0"}
+        kind: {type: string, enum: [request, llm, tool], description: "request: what the agent was asked (first); llm: a model call; tool: a tool call"}
         name: {type: string}
         started_at: {type: string, format: date-time}
         duration_ms: {type: integer}
         tokens_in: {type: integer}
         tokens_out: {type: integer}
         summary: {type: string}
+        args: {type: [object, "null"], additionalProperties: true, description: "tool: the arguments the model gave"}
+        error: {type: [string, "null"], description: "why the model call or tool call failed"}
+    StepDetail:
+      type: object
+      description: |
+        One AgentStep in full (getInvestigationStep). text and result are null for runs saved before the
+        trace recorded them.
+      required: [investigation_id, trace_seq, kind, name, text, thought, args, result, error]
+      properties:
+        investigation_id: {type: string, format: uuid}
+        trace_seq: {type: integer}
+        kind: {type: string, enum: [request, llm, tool], description: "request: what the agent was asked (first); llm: a model call; tool: a tool call"}
+        name: {type: string}
+        text: {type: [string, "null"], description: "llm: what the model wrote besides its tool calls"}
+        thought: {type: [string, "null"], description: "llm: a summary of the model's thinking"}
+        args: {type: [object, "null"], additionalProperties: true, description: "tool: the arguments the model gave"}
+        result: {description: "tool: what the tool returned to the model, any JSON"}
+        error: {type: [string, "null"]}
     InvestigationView:
       type: object
       description: contracts.agent.InvestigationSnapshot plus the agent's step trace
@@ -776,7 +934,7 @@ components:
         steps: {type: array, items: {$ref: "#/components/schemas/AgentStep"}}
     Investigations:
       type: object
-      required: [case_id, agent_status, latest, history]
+      required: [case_id, agent_status, latest, history, last_failure]
       properties:
         case_id: {type: integer}
         agent_status: {$ref: "#/components/schemas/AgentStatus"}
@@ -785,3 +943,140 @@ components:
           type: array
           description: earlier investigations, newest first
           items: {$ref: "#/components/schemas/InvestigationView"}
+        last_failure:
+          description: the newest run, when it failed; null when the newest run produced a verdict or none ran yet
+          oneOf: [{$ref: "#/components/schemas/InvestigationFailure"}, {type: "null"}]
+    InvestigationFailure:
+      type: object
+      description: a run that ended without a verdict, and what it did before it stopped
+      required: [investigation_id, case_version, error, completed_at, duration_ms, steps]
+      properties:
+        investigation_id: {type: string, format: uuid}
+        case_version: {type: integer}
+        error: {type: string, description: "why it stopped, e.g. Agent step limit reached."}
+        completed_at: {type: string, format: date-time}
+        duration_ms: {type: integer}
+        steps: {type: array, items: {$ref: "#/components/schemas/AgentStep"}}
+    InvestigationStarted:
+      type: object
+      required: [case_id, agent_status]
+      properties:
+        case_id: {type: integer}
+        agent_status: {type: string, const: investigating}
+
+    EvalOutcome:
+      type: string
+      enum: [correct, incorrect, pending_review, infra]
+      description: |
+        A run's outcome (report.run_outcome): incorrect when a code check failed or the human review said so,
+        pending_review until reviewed, correct after a passing review; infra runs do not count.
+    EvalBatchSummary:
+      type: object
+      required: [batch_id, note, started_at, finished_at, last_run_at, variants, case_ids, k, runs_done, runs_total]
+      properties:
+        batch_id: {type: string, format: uuid}
+        note: {type: [string, "null"]}
+        started_at: {type: string, format: date-time}
+        finished_at: {type: [string, "null"], format: date-time}
+        last_run_at: {type: [string, "null"], format: date-time}
+        variants: {type: array, items: {type: string}}
+        case_ids: {type: array, items: {type: integer}}
+        k: {type: integer}
+        runs_done: {type: integer, description: "runs that count: infra failures left out"}
+        runs_total: {type: integer, description: "variants x cases x k"}
+    EvalCase:
+      type: object
+      required: [case_id, scenario_id, expected_verdict]
+      properties:
+        case_id: {type: integer}
+        scenario_id: {type: string}
+        expected_verdict: {type: string}
+    EvalVariant:
+      type: object
+      required: [name, provider, model, reasoning_level, prompt_file]
+      properties:
+        name: {type: string}
+        provider: {type: string}
+        model: {type: string}
+        reasoning_level: {type: [string, "null"]}
+        prompt_file: {type: string}
+    EvalScoreRow:
+      type: object
+      required: [case_id, scenario_id, variant, k, correct, pending, pass_k, verdict, process, grounding, rationale,
+                 entities_missed, errors, infra, median_ms, median_tokens]
+      properties:
+        case_id: {type: integer}
+        scenario_id: {type: string}
+        variant: {type: string}
+        k: {type: integer, description: "runs that count"}
+        correct: {type: integer}
+        pending: {type: integer}
+        pass_k: {type: [boolean, "null"], description: "null while pending"}
+        verdict: {type: integer}
+        process: {type: integer}
+        grounding: {type: integer}
+        rationale: {type: integer}
+        entities_missed: {type: array, items: {type: string}}
+        errors: {type: integer}
+        infra: {type: integer}
+        median_ms: {type: number}
+        median_tokens: {type: number}
+    EvalRunSummary:
+      type: object
+      required: [run_id, case_id, variant, attempt, outcome, verdict, failure_kind, duration_ms, started_at]
+      properties:
+        run_id: {type: string, format: uuid}
+        case_id: {type: integer}
+        variant: {type: string}
+        attempt: {type: integer}
+        outcome: {$ref: "#/components/schemas/EvalOutcome"}
+        verdict: {type: [string, "null"]}
+        failure_kind: {type: [string, "null"]}
+        duration_ms: {type: integer}
+        started_at: {type: string, format: date-time}
+    EvalBatchDetail:
+      type: object
+      required: [batch, cases, variants, rows, runs, pending_reviews, infra, median_ms]
+      properties:
+        batch: {$ref: "#/components/schemas/EvalBatchSummary"}
+        cases: {type: array, items: {$ref: "#/components/schemas/EvalCase"}}
+        variants: {type: array, items: {$ref: "#/components/schemas/EvalVariant"}}
+        rows: {type: array, items: {$ref: "#/components/schemas/EvalScoreRow"}}
+        runs: {type: array, items: {$ref: "#/components/schemas/EvalRunSummary"}}
+        pending_reviews: {type: integer}
+        infra: {type: integer}
+        median_ms: {type: number}
+    EvalGrade:
+      type: object
+      required: [grader, version, passed, details]
+      properties:
+        grader: {type: string}
+        version: {type: integer}
+        passed: {type: [boolean, "null"], description: "null for diagnostics that only measure"}
+        details: {type: object, additionalProperties: true}
+    EvalRunDetail:
+      type: object
+      required: [run_id, batch_id, case_id, variant, attempt, outcome, reviewable, settings, status, verdict,
+                 confidence, rationale, error, evidence, grades, steps, prompt_tokens, output_tokens, duration_ms,
+                 started_at]
+      properties:
+        run_id: {type: string, format: uuid}
+        batch_id: {type: string, format: uuid}
+        case_id: {type: integer}
+        variant: {type: string}
+        attempt: {type: integer}
+        outcome: {$ref: "#/components/schemas/EvalOutcome"}
+        reviewable: {type: boolean, description: "code checks passed and not an infra failure"}
+        settings: {type: object, additionalProperties: true}
+        status: {type: string}
+        verdict: {type: [string, "null"]}
+        confidence: {type: [string, "null"]}
+        rationale: {type: [string, "null"]}
+        error: {type: [string, "null"]}
+        evidence: {type: array, items: {$ref: "#/components/schemas/EvidenceItem"}}
+        grades: {type: array, items: {$ref: "#/components/schemas/EvalGrade"}}
+        steps: {type: array, items: {$ref: "#/components/schemas/AgentStep"}}
+        prompt_tokens: {type: integer}
+        output_tokens: {type: integer}
+        duration_ms: {type: integer}
+        started_at: {type: string, format: date-time}
